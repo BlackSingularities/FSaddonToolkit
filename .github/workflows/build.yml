@@ -1,0 +1,99 @@
+name: Build & Release
+
+# Budowanie i wydanie wyłącznie po wypchnięciu tagu wersji (np. v1.2.3).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fsaddontoolkit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Testy i Windows (.exe / .msi)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Numer wersji
+        shell: bash
+        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Wersja
+        run: python scripts/set-version.py ${{ env.APP_VERSION }}
+      - run: npm ci
+      - name: Sprawdzenie składni interfejsu
+        shell: bash
+        run: for f in ui/*.js; do node --check "$f"; done
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Testy Rust
+        working-directory: src-tauri
+        run: cargo test
+      - name: Budowanie
+        run: npx tauri build --ci
+      - name: Zebranie plików
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe "dist/FSAddonToolkit_${APP_VERSION}_x64-setup.exe"
+          cp src-tauri/target/release/bundle/msi/*.msi "dist/FSAddonToolkit_${APP_VERSION}_x64.msi"
+          cp src-tauri/target/release/fs-addon-toolkit.exe "dist/FSAddonToolkit_${APP_VERSION}_portable.exe"
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  release:
+    name: Publikacja
+    needs: windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Numer wersji
+        shell: bash
+        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Opis wydania
+        run: |
+          {
+            echo "## FS Addon Toolkit ${APP_VERSION}"
+            echo
+            echo "| Plik | Do czego |"
+            echo "|---|---|"
+            echo "| \`FSAddonToolkit_${APP_VERSION}_x64-setup.exe\` | Windows – instalator (zalecany) |"
+            echo "| \`FSAddonToolkit_${APP_VERSION}_x64.msi\` | Windows – instalator MSI |"
+            echo "| \`FSAddonToolkit_${APP_VERSION}_portable.exe\` | Windows – wersja bez instalacji (wymaga WebView2) |"
+          } > notes.md
+          cat notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FS Addon Toolkit ${{ env.APP_VERSION }}
+          body_path: notes.md
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: dist/*

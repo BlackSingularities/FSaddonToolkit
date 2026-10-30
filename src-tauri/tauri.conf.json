@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FS Addon Toolkit",
+  "version": "1.0.0",
+  "identifier": "com.blacksingularities.fsaddontoolkit",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "FS Addon Toolkit",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 980,
+        "minHeight": 620,
+        "center": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "publisher": "BlackSingularities",
+    "category": "Utility",
+    "shortDescription": "Menedżer dodatków Community dla MSFS 2024",
+    "longDescription": "FS Addon Toolkit włącza i wyłącza dodatki do Microsoft Flight Simulator 2024 i 2020: łączy folder Community z bibliotekami dodatków na innych dyskach przez łącza katalogów, pokazuje miniatury, mapę lotnisk, profile, kontrolę konfliktów i pakiety oficjalne.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Polish", "English"],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": ["en-US"]
+      }
+    }
+  }
+}

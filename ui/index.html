@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pl" data-theme="dark" data-accent="sky">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>FS Addon Toolkit</title>
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <link rel="stylesheet" href="vendor/MarkerCluster.css" />
+  <link rel="stylesheet" href="vendor/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="vendor/leaflet.js"></script>
+  <script src="vendor/leaflet.markercluster.js"></script>
+</head>
+<body>
+  <div id="app">
+    <nav id="rail"></nav>
+    <main id="main">
+      <header id="topbar"></header>
+      <section id="view"></section>
+      <div id="bulk"></div>
+    </main>
+  </div>
+  <div id="scrim"></div>
+  <aside id="sheet" aria-hidden="true"></aside>
+  <div id="layers"></div>
+  <div id="dock" aria-live="polite"></div>
+  <div id="drop" hidden><div class="box"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg><h3>Upuść, aby zainstalować</h3><div class="muted">ZIP · RAR · 7z · foldery z dodatkami</div></div></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
