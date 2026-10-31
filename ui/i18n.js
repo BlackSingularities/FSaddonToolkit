@@ -1,6 +1,17 @@
 // Teksty interfejsu (polski i angielski). `{0}`, `{1}` – kolejne argumenty t().
 
 const PL = {
+  theme_amoled: 'AMOLED (czarny)',
+  routeNative: 'leży w', routeLoaded: 'wczytuje przy starcie', routeLinked: 'łącze', routeNoLink: 'brak łącza',
+  powerOnTitle: 'Włączony w symulatorze', powerOffTitle: 'Wyłączony', powerOnLink: 'Community → łącze do biblioteki', powerOnNative: 'Leży bezpośrednio w Community', powerOff: 'Kliknij, aby włączyć w MSFS',
+  noLayoutBanner: 'Brak layout.json – symulator może nie wczytać tego dodatku.', liveriesFor: 'Malowania tego samolotu', baseAircraft: 'Samolot bazowy',
+  showAll: 'Pokaż wszystkie ({0})', technical: 'Szczegóły techniczne',
+  boxSelect: 'Zaznacz obszar', boxSelectHint: 'Przeciągnij po mapie, aby zaznaczyć lotniska (albo przeciągnij z Shift w dowolnym momencie)',
+  boxSelectTip: 'Przeciągnij, aby zaznaczyć · Shift dodaje · Alt odejmuje · Ctrl+klik pojedynczo · Esc kończy',
+  selected: 'Zaznaczone', unselect: 'Odznacz', selectOne: 'Zaznacz', selectedTab: 'Zaznaczone ({0})', planTab: 'Lot', selectView: 'Zaznacz widoczne',
+  noSelection: 'Nic nie zaznaczono', noSelectionHint: 'Przeciągnij prostokąt po mapie w trybie zaznaczania (albo z wciśniętym Shift) – zaznaczone lotniska włączysz tu jednym kliknięciem.',
+  selSummary: 'Paczek: {0} · włączone: {1} · {2}', onlySelected: 'Tylko te lotniska', onlySelectedHint: 'Włącza zaznaczone i wyłącza wszystkie pozostałe lotniska (poza zablokowanymi)',
+  clearSelection: 'Wyczyść', lblMapSel: 'Zaznaczenie na mapie',
   appName: 'FS Addon Toolkit', ok: 'OK', cancel: 'Anuluj', save: 'Zapisz', add: 'Dodaj', remove: 'Usuń', delete: 'Usuń', edit: 'Edytuj', apply: 'Zastosuj',
   all: 'Wszystkie', enabled: 'Włączone', disabled: 'Wyłączone', enable: 'Włącz', disable: 'Wyłącz', details: 'Szczegóły', refresh: 'Odśwież', loading: 'Wczytywanie…',
   scanning: 'Skanowanie dodatków… pierwszy skan czyta wszystkie paczki i może potrwać minutę, kolejne zajmują ułamek sekundy.',
@@ -94,6 +105,17 @@ const PL = {
 };
 
 const EN = {
+  theme_amoled: 'AMOLED (black)',
+  routeNative: 'lives in', routeLoaded: 'loads at startup', routeLinked: 'link', routeNoLink: 'no link',
+  powerOnTitle: 'Enabled in the simulator', powerOffTitle: 'Disabled', powerOnLink: 'Community → link to the library', powerOnNative: 'Lives directly in Community', powerOff: 'Click to enable in MSFS',
+  noLayoutBanner: 'layout.json is missing – the simulator may not load this add-on.', liveriesFor: 'Liveries for this aircraft', baseAircraft: 'Base aircraft',
+  showAll: 'Show all ({0})', technical: 'Technical details',
+  boxSelect: 'Select area', boxSelectHint: 'Drag over the map to select airports (or Shift+drag at any time)',
+  boxSelectTip: 'Drag to select · Shift adds · Alt removes · Ctrl+click single · Esc to finish',
+  selected: 'Selected', unselect: 'Unselect', selectOne: 'Select', selectedTab: 'Selected ({0})', planTab: 'Flight', selectView: 'Select visible',
+  noSelection: 'Nothing selected', noSelectionHint: 'Drag a rectangle over the map in selection mode (or with Shift held) – enable the selected airports here with one click.',
+  selSummary: 'Packages: {0} · enabled: {1} · {2}', onlySelected: 'Only these airports', onlySelectedHint: 'Enables the selected ones and disables every other airport (except locked)',
+  clearSelection: 'Clear', lblMapSel: 'Map selection',
   appName: 'FS Addon Toolkit', ok: 'OK', cancel: 'Cancel', save: 'Save', add: 'Add', remove: 'Remove', delete: 'Delete', edit: 'Edit', apply: 'Apply',
   all: 'All', enabled: 'Enabled', disabled: 'Disabled', enable: 'Enable', disable: 'Disable', details: 'Details', refresh: 'Refresh', loading: 'Loading…',
   scanning: 'Scanning add-ons… the first scan reads every package and may take a minute, later scans take a fraction of a second.',

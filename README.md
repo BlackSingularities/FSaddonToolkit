@@ -21,7 +21,7 @@ Dodatki mogą leżeć na dowolnych dyskach – w folderze Community albo w **bib
 
 - **Dodatki** – kafelki z miniaturami albo tabela; kategorie: samoloty, lotniska, sceneria, malowania, narzędzia, biblioteki obiektów; filtry stanu, źródła i ulubionych; wyszukiwanie po nazwie, twórcy, ICAO, mieście i tagach; zaznaczanie z Ctrl/Shift i operacje grupowe.
 - **Szczegóły pakietu** – galeria miniatur (ContentInfo, malowania), warianty z `aircraft.cfg`, lotniska z mini-mapą, zależności i „wymagany przez”, notatki, tagi, własna kategoria, ulubione i blokada, `manifest.json`, informacje o wydaniu.
-- **Mapa** – lotniska odczytane z plików BGL scenerii (rekordy lotnisk), dla pozostałych kod odgadnięty z nazwy paczki i współrzędne z wbudowanej bazy 78 tys. lotnisk (OurAirports). Klastry, przełączanie z dymka, włącz/wyłącz wszystko w widoku, podkład ciemny, jasny, OSM i satelitarny.
+- **Mapa** – lotniska odczytane z plików BGL scenerii (rekordy lotnisk), dla pozostałych kod odgadnięty z nazwy paczki i współrzędne z wbudowanej bazy 78 tys. lotnisk (OurAirports). Pojedyncze punkty, zaznaczanie lotnisk przeciągnięciem i włączanie zaznaczonych, przełączanie z dymka, włącz/wyłącz wszystko w widoku, podkład ciemny, jasny, OSM i satelitarny.
 - **Przygotuj lot** – start, cel, promień i korytarz trasy: włączone zostają tylko scenerie lotnisk w pobliżu (oraz wybrany samolot), reszta lotnisk jest wyłączana. Wynik można zapisać jako profil.
 - **Profile** – zapamiętane zestawy dodatków z podglądem zmian przed zastosowaniem, trybem „tylko dodaj”, aktualizacją z bieżącego stanu, eksportem i importem (`.fsat-profile.json`), opcjonalnie ze stanem pakietów oficjalnych.
 - **Tryb lekki** – wyłącza wszystko poza zablokowanymi pakietami.
@@ -63,7 +63,7 @@ Test skanu prawdziwej instalacji (tylko odczyt):
 cd src-tauri && FSAT_LIB="H:\Dodatki" cargo test --release real_scan -- --ignored --nocapture
 ```
 
-Biblioteki interfejsu (Leaflet, MarkerCluster, ikony Lucide) są skopiowane do `ui/vendor` i `ui/icons.js` skryptem `npm run vendor`. Bazę lotnisk odświeża `python scripts/build-airports.py`.
+Biblioteki interfejsu (Leaflet, ikony Lucide) są skopiowane do `ui/vendor` i `ui/icons.js` skryptem `npm run vendor`. Bazę lotnisk odświeża `python scripts/build-airports.py`.
 
 Nowe wydanie powstaje wyłącznie po wypchnięciu tagu wersji (`v1.2.3`) – workflow `.github/workflows/build.yml` buduje instalator NSIS, MSI i wersję przenośną.
 
@@ -85,6 +85,6 @@ Nowe wydanie powstaje wyłącznie po wypchnięciu tagu wersji (`v1.2.3`) – wor
 
 ## Licencja
 
-MIT. Baza lotnisk: [OurAirports](https://ourairports.com/data/) (domena publiczna). Mapa: Leaflet (BSD-2), MarkerCluster (MIT), podkłady Esri i OpenStreetMap. Ikony: Lucide (ISC).
+MIT. Baza lotnisk: [OurAirports](https://ourairports.com/data/) (domena publiczna). Mapa: Leaflet (BSD-2), podkłady Esri i OpenStreetMap. Ikony: Lucide (ISC).
 
 Microsoft Flight Simulator jest znakiem towarowym Microsoft Corporation. Projekt nie jest powiązany z Microsoft ani Asobo Studio.

@@ -142,7 +142,7 @@ fn folder_of(path: &Path) -> String {
 }
 
 /// Podbijane przy zmianie sposobu odczytu pakietów – stara pamięć podręczna jest wtedy pomijana.
-pub const CACHE_VERSION: u32 = 2;
+pub const CACHE_VERSION: u32 = 4;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Cache {

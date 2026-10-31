@@ -132,6 +132,7 @@ T.event.listen('job', ({ payload: j }) => {
 async function loadScan(force = false) {
   try {
     S.scan = await invoke('scan', { force });
+    S.liveryIndex = null;
     S.status.running = S.scan.simRunning;
   } catch (e) {
     toast(errMsg(e), 'bad');
@@ -259,7 +260,7 @@ function renderRail() {
   };
 }
 function go(view) {
-  if (S.view === 'map' && view !== 'map') { S.map?.remove(); S.map = null; }
+  if (S.view === 'map' && view !== 'map') { S.map?.remove(); S.map = null; S.mapMarkers = []; S.mapSelectMode = false; }
   S.view = view;
   S.selecting = false; S.sel.clear();
   renderRail();
@@ -438,7 +439,7 @@ function cardHtml(p) {
       ${th ? `<img data-src="${esc(th)}" alt="" loading="lazy">` : ''}
       <div class="over"></div>
       <div class="check">${icon('check')}</div>
-      <div class="tl">${badgeIcao(p)}${p.meta.locked ? `<span class="tag">${icon('lock')}</span>` : ''}</div>
+      <div class="tl">${badgeIcao(p)}${cat === 'aircraft' && liveryCount(p) ? `<span class="tag" title="${esc(t('liveriesFor'))}">${icon('livery')}${liveryCount(p)}</span>` : ''}${p.meta.locked ? `<span class="tag">${icon('lock')}</span>` : ''}</div>
       <div class="tr"><button class="switch ${p.enabled ? 'on' : ''} ${S.busy.has(p.id) ? 'busy' : ''}" data-sw="${p.id}" title="${esc(p.enabled ? t('disable') : t('enable'))}"></button></div>
       <div class="bl">${icon(p.link ? 'link' : p.source === 'community' ? 'folder' : cat)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sourceLabel(p))}</span></div>
     </div>
@@ -564,101 +565,176 @@ function renderBulk(list) {
 
 // ───────────── Arkusz pakietu ─────────────
 let galleryIdx = 0;
+let variantsOpen = false;
+const lc = (s) => String(s || '').toLowerCase();
+// Malowania ↔ samoloty: po nazwach folderów SimObjects i `base_container`.
+function relatedOf(p) {
+  const cat = catOf(p);
+  if (cat === 'aircraft') {
+    const mine = new Set((p.simObjects || []).map(lc));
+    if (!mine.size) return [];
+    return S.scan.packages.filter((x) => x.id !== p.id && catOf(x) === 'livery' && [...(x.baseAircraft || []), ...(x.simObjects || [])].some((n) => mine.has(lc(n))));
+  }
+  if (cat === 'livery') {
+    const want = new Set([...(p.baseAircraft || []), ...(p.simObjects || [])].map(lc));
+    return S.scan.packages.filter((x) => x.id !== p.id && catOf(x) === 'aircraft' && (x.simObjects || []).some((n) => want.has(lc(n))));
+  }
+  return [];
+}
+function liveryCount(p) {
+  if (!S.liveryIndex) {
+    S.liveryIndex = new Map();
+    for (const x of S.scan.packages) if (catOf(x) === 'aircraft') S.liveryIndex.set(x.id, relatedOf(x).length);
+  }
+  return S.liveryIndex.get(p.id) || 0;
+}
+function sourceNode(p) {
+  if (p.source === 'library') return { icon: 'drive', title: p.libraryName + (p.group ? ` / ${p.group}` : ''), path: p.path, cls: 'acc' };
+  if (p.source === 'external') return { icon: 'link', title: t('src_external'), path: p.path, cls: 'acc' };
+  if (p.source === 'parking') return { icon: 'folder', title: t('src_parking'), path: p.path, cls: '' };
+  return { icon: 'folder', title: 'Community', path: p.path, cls: 'ok' };
+}
+function routeHtml(p) {
+  const src = sourceNode(p);
+  const community = S.scan.target;
+  const linked = !!p.link;
+  if (p.source === 'community') {
+    return `<div class="route"><div class="node"><span class="ib ok">${icon('folder')}</span><div><b>Community</b><small>${esc(p.path)}</small></div></div>
+      <div class="wire live"><i></i>${esc(t('routeNative'))}<i></i></div>
+      <div class="node"><span class="ib ok">${icon('aircraft')}</span><div><b>MSFS</b><small>${esc(t('routeLoaded'))}</small></div></div></div>`;
+  }
+  return `<div class="route"><div class="node"><span class="ib ${src.cls}">${icon(src.icon)}</span><div><b>${esc(src.title)}</b><small>${esc(src.path)}</small></div></div>
+    <div class="wire ${linked ? 'live' : ''}"><i></i>${esc(linked ? t('routeLinked') : t('routeNoLink'))}<i></i></div>
+    <div class="node"><span class="ib ${linked ? 'ok' : ''}">${icon(linked ? 'link' : 'unlink')}</span><div><b>Community</b><small>${esc(linked ? p.link : community)}</small></div></div></div>`;
+}
+function relRow(x) {
+  return `<div class="rel" data-open="${x.id}"><div class="th">${x.thumbs[0] ? `<img data-src="${esc(x.thumbs[0])}" alt="">` : ''}</div>
+    <div class="grow"><b>${esc(x.title)}</b><small>${esc(x.creator || x.folder)} · ${fmtSize(x.size)}</small></div>
+    <button class="switch ${x.enabled ? 'on' : ''}" data-sw="${x.id}"></button></div>`;
+}
 async function openSheet(id, keep = false) {
   const p = pkgById(id);
   if (!p) return;
-  if (S.sheetId !== id) galleryIdx = 0;
+  if (S.sheetId !== id) { galleryIdx = 0; variantsOpen = false; }
   S.sheetId = id;
   const cat = catOf(p);
   const sh = $('#sheet');
   const m = p.meta;
   const thumbs = p.thumbs;
+  galleryIdx = Math.min(galleryIdx, Math.max(thumbs.length - 1, 0));
   const prof = S.profiles.filter((x) => x.packages.includes(p.key));
+  const related = relatedOf(p);
   const scroll = keep ? $('.sheet-scroll', sh)?.scrollTop || 0 : 0;
+  const variants = p.aircraft;
+  const shownVariants = variantsOpen ? variants : variants.slice(0, 10);
+  const powerSub = p.enabled ? (p.link ? t('powerOnLink') : t('powerOnNative')) : t('powerOff');
   sh.innerHTML = `<div class="sheet-scroll">
-    <div class="gallery">${thumbs.length ? `<img id="g-img" alt="">` : `<div class="thumb" style="height:100%"><div class="ph">${icon(cat)}</div></div>`}
-      <div class="over"></div>
-      ${thumbs.length > 1 ? `<button class="nav prev" id="g-prev">${icon('chevron')}</button><button class="nav next" id="g-next">${icon('chevron')}</button><div class="dots">${thumbs.slice(0, 14).map((_, i) => `<i class="${i === galleryIdx ? 'on' : ''}"></i>`).join('')}</div>` : ''}
-      <button class="close" id="sh-close">${icon('close')}</button>
-    </div>
-    <div class="sheet-head">
-      <div class="grow">
+    <div class="hero">
+      ${thumbs.length ? `<img id="g-img" alt="">` : `<div class="ph">${icon(cat)}</div>`}
+      <div class="shade"></div>
+      <div class="top">
+        <span class="glass"><span class="dot ${p.enabled ? 'on' : ''}"></span>${esc(p.enabled ? t('enabled') : t('disabled'))}</span>
+        ${m.locked ? `<span class="glass">${icon('lock')}${esc(t('locked'))}</span>` : ''}
+        ${m.favorite ? `<span class="glass" style="color:var(--warn)">★</span>` : ''}
+        <span class="grow"></span>
+        <button class="glass icon" id="sh-close" title="Esc">${icon('close')}</button>
+      </div>
+      ${thumbs.length > 1 ? `<button class="nav prev" id="g-prev">${icon('chevron')}</button><button class="nav next" id="g-next">${icon('chevron')}</button>` : ''}
+      <div class="title">
+        <div class="eyebrow"><i style="background:${catColor(cat)}"></i>${esc(t('cat_' + cat))}${p.version ? ` · v${esc(p.version)}` : ''}</div>
         <h2>${esc(p.title)}</h2>
-        <div class="muted" style="margin-top:3px">${esc([p.creator, p.manufacturer && p.manufacturer !== p.creator ? p.manufacturer : ''].filter(Boolean).join(' · ') || p.folder)}</div>
-        <div class="chips" style="margin-top:10px">
-          <span class="tag" style="color:${catColor(cat)}">${icon(cat)}${esc(t('cat_' + cat))}</span>
-          <span class="tag ${p.enabled ? 'ok' : ''}">${esc(p.enabled ? t('enabled') : t('disabled'))}</span>
-          ${p.link ? `<span class="tag acc">${icon('link')}${esc(t('viaLink'))}</span>` : ''}
-          ${m.locked ? `<span class="tag warn">${icon('lock')}${esc(t('locked'))}</span>` : ''}
-          ${prof.map((x) => `<span class="tag" style="color:${x.color}">${icon('profiles')}${esc(x.name)}</span>`).join('')}
-        </div>
+        <div class="by">${esc([p.creator, p.manufacturer && p.manufacturer !== p.creator ? p.manufacturer : ''].filter(Boolean).join(' · ') || p.folder)}</div>
       </div>
-      <button class="switch lg ${p.enabled ? 'on' : ''}" data-sw="${p.id}"></button>
     </div>
+    ${thumbs.length > 1 ? `<div class="strip">${thumbs.slice(0, 24).map((th, i) => `<button data-g="${i}" class="${i === galleryIdx ? 'on' : ''}"><img data-src="${esc(th)}" alt=""></button>`).join('')}</div>` : ''}
+    <div class="cmd">
+      <button class="power ${p.enabled ? 'on' : ''}" data-sw="${p.id}">
+        <span class="lbl"><b>${esc(p.enabled ? t('powerOnTitle') : t('powerOffTitle'))}</b><small>${esc(powerSub)}</small></span>
+        <span class="switch lg ${p.enabled ? 'on' : ''} ${S.busy.has(p.id) ? 'busy' : ''}"></span>
+      </button>
+      <button class="tool ${m.favorite ? 'on' : ''}" id="s-fav" title="${esc(m.favorite ? t('favorite') : t('addFavorite'))}">${icon('star')}</button>
+      <button class="tool ${m.locked ? 'on acc' : ''}" id="s-lock" title="${esc(t('lockHint'))}">${icon(m.locked ? 'lock' : 'unlock')}</button>
+      <button class="tool" id="s-open" title="${esc(t('openFolder'))}">${icon('folder')}</button>
+      <button class="tool" id="s-prof" title="${esc(t('toProfile'))}">${icon('profiles')}</button>
+    </div>
+    <div class="gauges">
+      <div class="gauge"><span>${esc(t('colSize'))}</span><b>${fmtSize(p.size)}</b></div>
+      <div class="gauge"><span>${esc(t('files'))}</span><b>${nf().format(p.files)}</b></div>
+      <div class="gauge"><span>${esc(t('colVer'))}</span><b title="${esc(p.version)}">${esc(p.version || '—')}</b></div>
+      <div class="gauge"><span>${esc(t('installed'))}</span><b>${fmtDate(p.modified)}</b></div>
+    </div>
+    ${routeHtml(p)}
     <div class="sheet-body">
-      <div class="sheet-actions">
-        <button class="btn sm ${m.favorite ? 'primary' : ''}" id="s-fav">${icon('star')}${esc(m.favorite ? t('favorite') : t('addFavorite'))}</button>
-        <button class="btn sm ${m.locked ? 'primary' : ''}" id="s-lock" title="${esc(t('lockHint'))}">${icon(m.locked ? 'lock' : 'unlock')}${esc(m.locked ? t('locked') : t('lock'))}</button>
-        <button class="btn sm" id="s-open">${icon('folder')}${esc(t('openFolder'))}</button>
-        <button class="btn sm" id="s-prof">${icon('profiles')}${esc(t('toProfile'))}</button>
-        ${p.source !== 'library' && S.settings.libraries.length ? `<button class="btn sm" id="s-move">${icon('move')}${esc(t('moveToLibrary'))}</button>` : ''}
+      ${prof.length ? `<div class="chips" style="margin-top:14px">${prof.map((x) => `<span class="tag" style="color:${x.color}">${icon('profiles')}${esc(x.name)}</span>`).join('')}</div>` : ''}
+      ${!p.hasLayout ? `<div class="banner warn" style="margin:14px 0 0">${icon('warn')}<div class="grow">${esc(t('noLayoutBanner'))}</div><button class="btn sm" id="s-layout">${esc(t('regenerate'))}</button></div>` : ''}
+      ${related.length ? `<div class="panel"><h4>${icon(cat === 'aircraft' ? 'livery' : 'aircraft')}${esc(cat === 'aircraft' ? t('liveriesFor') : t('baseAircraft'))} <span class="n">${related.length}</span><span class="grow"></span>
+        ${cat === 'aircraft' ? `<button class="btn sm ghost" id="s-liv-on">${esc(t('enableAllN', related.filter((x) => !x.enabled).length))}</button>` : ''}</h4>
+        <div style="padding-bottom:6px">${related.slice(0, 40).map(relRow).join('')}</div></div>` : ''}
+      ${variants.length ? `<div class="panel"><h4>${icon('aircraft')}${esc(t('variants'))} <span class="n">${variants.length}</span></h4>
+        <div class="vchips">${shownVariants.map((a) => `<span>${esc(a)}</span>`).join('')}${variants.length > shownVariants.length ? `<button id="s-more">${esc(t('showAll', variants.length))}</button>` : ''}</div></div>` : ''}
+      ${p.airports.length ? `<div class="panel"><h4>${icon('airport')}${esc(t('airports'))} <span class="n">${p.airports.length}</span></h4><div class="mini-map" id="mini-map"></div>
+        <div class="apt-list">${p.airports.slice(0, 120).map((a, i) => `<div class="apt" data-apt="${i}"><span class="tag icao ${a.source === 'bgl' ? 'acc' : ''}">${esc(a.icao)}</span><span class="grow">${esc(a.name || '—')}${a.city ? ` <span class="faint">· ${esc(a.city)}</span>` : ''}</span><span class="faint mono">${esc(a.country)}</span></div>`).join('')}</div>
+        ${p.airports.some((a) => a.source === 'name') ? `<div class="faint" style="font-size:12px;padding:0 14px 12px">${esc(t('guessedAirports'))}</div>` : ''}</div>` : ''}
+      ${p.dependencies.length ? `<div class="panel"><h4>${icon('merge')}${esc(t('dependencies'))} <span class="n">${p.dependencies.length}</span></h4><div class="apt-list">${p.dependencies.map((d) => { const dep = S.scan.packages.find((x) => x.key === d.name.toLowerCase()); return `<div class="apt" ${dep ? `data-open="${dep.id}"` : ''}><span class="grow mono">${esc(d.name)}</span>${dep ? `<span class="tag ${dep.enabled ? 'ok' : 'warn'}">${esc(dep.enabled ? t('enabled') : t('disabled'))}</span>` : `<span class="tag">${esc(t('notInstalled'))}</span>`}</div>`; }).join('')}</div></div>` : ''}
+      <div id="dependents"></div>
+      <div id="notes-box"></div>
+      <div class="panel"><h4>${icon('tag')}${esc(t('organize'))}</h4><div class="pad" style="display:flex;flex-direction:column;gap:8px">
+        <select class="inp" id="s-cat"><option value="">${esc(t('autoCategory'))}: ${esc(t('cat_' + p.category))}</option>${CATS.map((c) => `<option value="${c.id}" ${m.category === c.id ? 'selected' : ''}>${esc(t('cat_' + c.id))}</option>`).join('')}</select>
+        <div class="tags-in" id="s-tags">${m.tags.map((tg, i) => `<span>${esc(tg)}<button data-rmtag="${i}">×</button></span>`).join('')}<input placeholder="${esc(t('tagsPh'))}"></div>
+        <textarea class="inp" id="s-note" rows="2" placeholder="${esc(t('notePh'))}">${esc(m.note)}</textarea></div></div>
+      <details class="panel"><summary>${icon('file')}${esc(t('technical'))}${icon('chevron', 'chev')}</summary>
+        <dl class="kv">
+          <dt>${esc(t('folder'))}</dt><dd class="mono">${esc(p.folder)}</dd>
+          <dt>${esc(t('contentType'))}</dt><dd class="mono">${esc(p.contentType || '—')}</dd>
+          ${p.minGameVersion ? `<dt>${esc(t('minSim'))}</dt><dd class="mono">${esc(p.minGameVersion)}</dd>` : ''}
+          <dt>layout.json</dt><dd>${p.hasLayout ? 'OK' : esc(t('missing'))}</dd>
+          ${(p.simObjects || []).length ? `<dt>SimObjects</dt><dd class="mono">${esc(p.simObjects.slice(0, 8).join(', '))}</dd>` : ''}
+        </dl>
+        <pre class="manifest" id="manifest">…</pre></details>
+      <div class="sheet-foot">
+        ${p.source !== 'library' && S.settings.libraries.length ? `<button class="btn sm" id="s-move">${icon('move')}${esc(t('moveToLibrary'))}</button>` : '<span></span>'}
+        <button class="linkbtn" id="s-trash">${icon('trash')}${esc(t('toTrash'))}</button>
       </div>
-      <dl class="kv">
-        <dt>${esc(t('colVer'))}</dt><dd class="mono">${esc(p.version || '—')}</dd>
-        <dt>${esc(t('colSize'))}</dt><dd>${fmtSize(p.size)} <span class="faint">· ${nf().format(p.files)} ${esc(t('files'))}</span></dd>
-        <dt>${esc(t('colSource'))}</dt><dd>${esc(sourceLabel(p))}</dd>
-        <dt>${esc(t('folder'))}</dt><dd class="mono">${esc(p.path)}</dd>
-        ${p.link ? `<dt>${esc(t('link'))}</dt><dd class="mono">${esc(p.link)}</dd>` : ''}
-        <dt>${esc(t('contentType'))}</dt><dd class="mono">${esc(p.contentType || '—')}</dd>
-        ${p.minGameVersion ? `<dt>${esc(t('minSim'))}</dt><dd class="mono">${esc(p.minGameVersion)}</dd>` : ''}
-        <dt>${esc(t('installed'))}</dt><dd>${fmtDate(p.modified)}</dd>
-        <dt>layout.json</dt><dd>${p.hasLayout ? `<span class="tag ok">${icon('check')}OK</span>` : `<span class="tag warn">${esc(t('missing'))}</span> <button class="btn sm" id="s-layout">${esc(t('regenerate'))}</button>`}</dd>
-      </dl>
-      ${p.airports.length ? `<div class="sheet-section"><h4>${icon('airport')}${esc(t('airports'))} · ${p.airports.length}</h4><div class="mini-map" id="mini-map"></div><div class="apt-list">${p.airports.slice(0, 120).map((a, i) => `<div class="apt" data-apt="${i}"><span class="tag icao ${a.source === 'bgl' ? 'acc' : ''}">${esc(a.icao)}</span><span class="grow">${esc(a.name || '—')}${a.city ? ` <span class="faint">· ${esc(a.city)}</span>` : ''}</span><span class="faint mono">${esc(a.country)}</span></div>`).join('')}</div>${p.airports.some((a) => a.source === 'name') ? `<div class="faint" style="font-size:12px;margin-top:6px">${esc(t('guessedAirports'))}</div>` : ''}</div>` : ''}
-      ${p.aircraft.length ? `<div class="sheet-section"><h4>${icon('aircraft')}${esc(t('variants'))} · ${p.aircraft.length}</h4><div class="variants">${p.aircraft.map((a) => `<div>${esc(a)}</div>`).join('')}</div></div>` : ''}
-      ${p.dependencies.length ? `<div class="sheet-section"><h4>${icon('merge')}${esc(t('dependencies'))}</h4><div class="apt-list">${p.dependencies.map((d) => { const dep = S.scan.packages.find((x) => x.key === d.name.toLowerCase()); return `<div class="apt" ${dep ? `data-open="${dep.id}"` : ''}><span class="grow mono">${esc(d.name)}</span>${dep ? `<span class="tag ${dep.enabled ? 'ok' : 'warn'}">${esc(dep.enabled ? t('enabled') : t('disabled'))}</span>` : `<span class="tag">${esc(t('notInstalled'))}</span>`}</div>`; }).join('')}</div></div>` : ''}
-      <div class="sheet-section" id="dependents"></div>
-      <div class="sheet-section"><h4>${icon('tag')}${esc(t('organize'))}</h4>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <select class="inp" id="s-cat"><option value="">${esc(t('autoCategory'))} (${esc(t('cat_' + p.category))})</option>${CATS.map((c) => `<option value="${c.id}" ${m.category === c.id ? 'selected' : ''}>${esc(t('cat_' + c.id))}</option>`).join('')}</select>
-          <input class="inp" id="s-tags" placeholder="${esc(t('tagsPh'))}" value="${esc(m.tags.join(', '))}">
-        </div>
-        <textarea class="inp" id="s-note" rows="2" placeholder="${esc(t('notePh'))}" style="width:100%;margin-top:8px">${esc(m.note)}</textarea>
-      </div>
-      <div class="sheet-section" id="notes-box"></div>
-      <div class="sheet-section"><details><summary>manifest.json</summary><pre class="manifest" id="manifest" style="margin-top:8px">…</pre></details></div>
-      <div class="sheet-actions" style="margin-top:22px"><button class="btn sm danger" id="s-trash">${icon('trash')}${esc(t('toTrash'))}</button></div>
     </div></div>`;
   sh.classList.add('show');
   $('#scrim').classList.add('show');
   $('.sheet-scroll', sh).scrollTop = scroll;
+  observeThumbs(sh);
   const showImg = async () => {
     const img = $('#g-img');
-    if (!img) return;
+    if (!img || !thumbs.length) return;
     const path = thumbs[galleryIdx];
-    img.src = thumbCache.get(path) || fileSrc(path);
-    $$('.gallery .dots i').forEach((d, i) => d.classList.toggle('on', i === galleryIdx));
+    img.src = fileSrc(path);
+    $$('.strip button', sh).forEach((b, i) => b.classList.toggle('on', i === galleryIdx));
+    $(`.strip button[data-g="${galleryIdx}"]`, sh)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   showImg();
-  if ($('#g-prev')) {
-    $('#g-prev').onclick = () => { galleryIdx = (galleryIdx - 1 + thumbs.length) % thumbs.length; showImg(); };
-    $('#g-next').onclick = () => { galleryIdx = (galleryIdx + 1) % thumbs.length; showImg(); };
-  }
+  const step = (d) => { galleryIdx = (galleryIdx + d + thumbs.length) % thumbs.length; showImg(); };
+  if ($('#g-prev')) { $('#g-prev').onclick = () => step(-1); $('#g-next').onclick = () => step(1); }
+  $$('.strip [data-g]', sh).forEach((b) => (b.onclick = () => { galleryIdx = +b.dataset.g; showImg(); }));
+  sh.onkeydown = null;
   $('#sh-close').onclick = closeSheet;
-  bindCards(sh);
+  $$('[data-sw]', sh).forEach((sw) => (sw.onclick = (e) => { e.stopPropagation(); const x = pkgById(sw.dataset.sw); if (x) toggle([x.id], !x.enabled); }));
+  $$('[data-open]', sh).forEach((el) => (el.onclick = () => openSheet(el.dataset.open)));
   $('#s-fav').onclick = () => setMeta(p, { favorite: !m.favorite });
   $('#s-lock').onclick = () => setMeta(p, { locked: !m.locked });
   $('#s-open').onclick = () => opener.openPath(p.path).catch((e) => toast(errMsg(e), 'bad'));
   $('#s-prof').onclick = () => addToProfileDialog([p.id]);
   $('#s-move') && ($('#s-move').onclick = () => relocateDialog([p.id]));
   $('#s-trash').onclick = () => trashDialog([p.id]);
+  $('#s-more') && ($('#s-more').onclick = () => { variantsOpen = true; openSheet(p.id, true); });
+  $('#s-liv-on') && ($('#s-liv-on').onclick = () => toggle(related.filter((x) => !x.enabled).map((x) => x.id), true, t('lblBulkEnable')));
   $('#s-layout') && ($('#s-layout').onclick = async () => {
     try { const n = await invoke('generate_layout', { id: p.id }); toast(t('layoutDone', n)); await refresh(); } catch (e) { toast(errMsg(e), 'bad'); }
   });
   $('#s-cat').onchange = (e) => setMeta(p, { category: e.target.value });
-  $('#s-tags').onchange = (e) => setMeta(p, { tags: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) });
+  const tagIn = $('#s-tags input');
+  tagIn.onkeydown = (e) => {
+    if ((e.key === 'Enter' || e.key === ',') && tagIn.value.trim()) { e.preventDefault(); setMeta(p, { tags: [...new Set([...m.tags, tagIn.value.trim().replace(/,$/, '')])] }); }
+    if (e.key === 'Backspace' && !tagIn.value && m.tags.length) setMeta(p, { tags: m.tags.slice(0, -1) });
+  };
+  $$('[data-rmtag]', sh).forEach((b) => (b.onclick = () => setMeta(p, { tags: m.tags.filter((_, i) => i !== +b.dataset.rmtag) })));
   $('#s-note').onchange = (e) => setMeta(p, { note: e.target.value });
-  $$('[data-open]', sh).forEach((el) => (el.onclick = () => openSheet(el.dataset.open)));
   if (p.airports.length && window.L) {
     setTimeout(() => {
       const mm = $('#mini-map');
@@ -666,8 +742,8 @@ async function openSheet(id, keep = false) {
       const map = L.map(mm, { zoomControl: false, attributionControl: false });
       tileLayer(S.settings.mapStyle).addTo(map);
       const pts = p.airports.map((a) => [a.lat, a.lon]);
-      p.airports.slice(0, 300).forEach((a) => L.marker([a.lat, a.lon], { icon: pin(p.enabled ? 'on' : 'off') }).addTo(map).bindTooltip(a.icao));
-      if (pts.length === 1) map.setView(pts[0], 11); else map.fitBounds(pts, { padding: [20, 20], maxZoom: 11 });
+      p.airports.slice(0, 300).forEach((a) => L.circleMarker([a.lat, a.lon], markerStyle(p.enabled, false)).addTo(map).bindTooltip(a.icao));
+      if (pts.length === 1) map.setView(pts[0], 12); else map.fitBounds(pts, { padding: [20, 20], maxZoom: 11 });
       $$('[data-apt]', sh).forEach((el) => (el.onclick = () => { const a = p.airports[+el.dataset.apt]; map.setView([a.lat, a.lon], 13); }));
     }, 60);
   }
@@ -675,10 +751,13 @@ async function openSheet(id, keep = false) {
     const d = await invoke('package_details', { id: p.id });
     if (S.sheetId !== id) return;
     $('#manifest').textContent = d.manifest || '—';
-    if (d.releaseNotes) $('#notes-box').innerHTML = `<h4>${icon('note')}${esc(t('releaseNotes'))}</h4><div class="muted selectable" style="white-space:pre-wrap;font-size:13px">${esc(d.releaseNotes)}</div>`;
-    if (d.dependents.length) {
-      $('#dependents').innerHTML = `<h4>${icon('link')}${esc(t('requiredBy'))}</h4><div class="apt-list">${d.dependents.map((x) => pkgById(x)).filter(Boolean).map((x) => `<div class="apt" data-open="${x.id}"><span class="grow">${esc(x.title)}</span><span class="tag ${x.enabled ? 'ok' : ''}">${esc(x.enabled ? t('enabled') : t('disabled'))}</span></div>`).join('')}</div>`;
+    if (d.releaseNotes) $('#notes-box').innerHTML = `<div class="panel"><h4>${icon('note')}${esc(t('releaseNotes'))}</h4><div class="pad muted selectable" style="white-space:pre-wrap;font-size:13px">${esc(d.releaseNotes)}</div></div>`;
+    const deps = d.dependents.map((x) => pkgById(x)).filter(Boolean);
+    if (deps.length) {
+      $('#dependents').innerHTML = `<div class="panel"><h4>${icon('link')}${esc(t('requiredBy'))} <span class="n">${deps.length}</span></h4><div style="padding-bottom:6px">${deps.map(relRow).join('')}</div></div>`;
+      observeThumbs($('#dependents'));
       $$('#dependents [data-open]').forEach((el) => (el.onclick = () => openSheet(el.dataset.open)));
+      $$('#dependents [data-sw]').forEach((sw) => (sw.onclick = (e) => { e.stopPropagation(); const x = pkgById(sw.dataset.sw); if (x) toggle([x.id], !x.enabled); }));
     }
   } catch { /* szczegóły są dodatkiem */ }
 }
@@ -746,12 +825,24 @@ function tileLayer(style) {
   const attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
   if (style === 'satellite') return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri, Maxar, Earthstar Geographics' });
   if (style === 'osm') return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: attr });
-  const dark = style === 'dark' || (style !== 'light' && document.documentElement.dataset.theme === 'dark');
+  const dark = style === 'dark' || (style !== 'light' && document.documentElement.dataset.theme !== 'light');
   return L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${dark ? 'World_Dark_Gray_Base' : 'World_Light_Gray_Base'}/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16, attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap' });
+}
+const cssVar = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+function markerStyle(on, selected) {
+  return {
+    radius: selected ? 8 : 6,
+    color: selected ? cssVar('--acc', '#5cc4ff') : '#ffffff',
+    weight: selected ? 3 : 1.5,
+    fillColor: on ? cssVar('--ok', '#4fd18b') : '#7a8799',
+    fillOpacity: on ? 0.95 : 0.8,
+  };
 }
 const pin = (cls) => L.divIcon({ className: '', html: `<div class="apt-pin ${cls}"></div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
 let mapTab = 'list';
 function setMapTab(tab) { mapTab = tab; renderMapSide(); }
+S.mapSel = new Set();
+S.mapSelectMode = false;
 
 function airportPoints() {
   const pts = [];
@@ -762,73 +853,223 @@ function airportPoints() {
   }
   return pts;
 }
-function viewMap(v) {
+function mapTopbar() {
   const pts = airportPoints();
   const pkgs = new Set(pts.map((x) => x.pkg.id));
   topbar(t('nav_map'), esc(t('mapSub', pts.length, pkgs.size)),
     `<div class="seg">${[['dark', t('mapDark')], ['light', t('mapLight')], ['osm', 'OSM'], ['satellite', t('mapSat')]].map(([k, l]) => `<button data-ms="${k}" class="${(S.settings.mapStyle || 'dark') === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`);
-  v.innerHTML = `<div class="map-wrap"><div id="map"></div><div class="map-side" id="map-side"></div></div>`;
-  $$('[data-ms]').forEach((b) => (b.onclick = () => { S.settings.mapStyle = b.dataset.ms; persist(); renderView(); }));
-  if (!window.L) { $('#map').innerHTML = `<div class="empty">${icon('map')}<div>Leaflet?</div></div>`; return; }
-  S.map?.remove();
-  const map = L.map('map', { worldCopyJump: true, preferCanvas: true, zoomControl: true, minZoom: 2 }).setView([50, 15], 4);
-  S.map = map;
-  tileLayer(S.settings.mapStyle).addTo(map);
-  const cluster = L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false, chunkedLoading: true });
-  S.mapLayers = { cluster, route: L.layerGroup().addTo(map), official: L.layerGroup() };
-  for (const a of pts) {
-    const m = L.marker([a.lat, a.lon], { icon: pin(a.pkg.enabled ? 'on' : 'off'), title: `${a.icao} · ${a.pkg.title}` });
-    m.bindPopup(() => popupHtml(a), { maxWidth: 300 });
-    m.on('popupopen', (e) => bindPopup(e.popup, a.pkg));
-    cluster.addLayer(m);
+  // Zmiana podkładu podmienia tylko kafelki – widok zostaje tam, gdzie był.
+  $$('[data-ms]').forEach((b) => (b.onclick = () => {
+    S.settings.mapStyle = b.dataset.ms;
+    persist();
+    if (S.mapTiles) S.mapTiles.remove();
+    S.mapTiles = tileLayer(S.settings.mapStyle).addTo(S.map);
+    $$('[data-ms]').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+}
+function viewMap(v) {
+  // Mapa już stoi – po przełączeniu dodatku odświeżamy tylko znaczniki i panel.
+  if (S.map && $('#map') && document.body.contains(S.map.getContainer())) {
+    mapTopbar();
+    refreshMarkers();
+    renderMapSide();
+    return;
   }
-  map.addLayer(cluster);
-  if (pts.length) map.fitBounds(pts.map((a) => [a.lat, a.lon]), { padding: [30, 30], maxZoom: 8 });
-  map.on('moveend', debounce(() => { if (mapTab === 'list') renderMapSide(); }, 150));
+  mapTopbar();
+  v.innerHTML = `<div class="map-wrap"><div id="map-holder"><div id="map"></div>
+      <div class="map-tools"><button class="btn sm ${S.mapSelectMode ? 'primary' : ''}" id="m-select" title="${esc(t('boxSelectHint'))}">${icon('select')}${esc(t('boxSelect'))}</button></div>
+      <div class="map-hint ${S.mapSelectMode ? '' : 'hidden'}" id="m-hint">${esc(t('boxSelectTip'))}</div>
+      <div class="map-legend"><span><i style="background:${cssVar('--ok', '#4fd18b')}"></i>${esc(t('enabled'))}</span><span><i style="background:#7a8799"></i>${esc(t('disabled'))}</span><span><i style="background:transparent;border-color:${cssVar('--acc', '#5cc4ff')}"></i>${esc(t('selected'))}</span></div>
+    </div><div class="map-side" id="map-side"></div></div>`;
+  if (!window.L) { $('#map').innerHTML = `<div class="empty">${icon('map')}<div>Leaflet?</div></div>`; return; }
+  const map = L.map('map', { worldCopyJump: true, preferCanvas: true, zoomControl: true, minZoom: 2, boxZoom: false });
+  S.map = map;
+  S.mapTiles = tileLayer(S.settings.mapStyle).addTo(map);
+  S.mapLayers = { route: L.layerGroup().addTo(map), points: L.layerGroup().addTo(map) };
+  S.mapMarkers = [];
+  for (const a of airportPoints()) {
+    const m = L.circleMarker([a.lat, a.lon], markerStyle(a.pkg.enabled, S.mapSel.has(a.pkg.id)));
+    m.bindTooltip(`<b>${esc(a.icao)}</b> · ${esc(a.pkg.title)}`, { direction: 'top', offset: [0, -6] });
+    m.on('click', (e) => {
+      if (S.mapSelectMode || e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+        L.DomEvent.stop(e);
+        if (S.mapSel.has(a.pkg.id)) S.mapSel.delete(a.pkg.id); else S.mapSel.add(a.pkg.id);
+        mapTab = 'sel';
+        refreshMarkers();
+        renderMapSide();
+        return;
+      }
+      L.popup({ maxWidth: 300 }).setLatLng([a.lat, a.lon]).setContent(popupHtml(a)).openOn(map);
+      setTimeout(() => bindPopup(map, a.pkg), 0);
+    });
+    m.addTo(S.mapLayers.points);
+    S.mapMarkers.push({ m, a });
+  }
+  const pts = S.mapMarkers.map(({ a }) => [a.lat, a.lon]);
+  if (S.mapView) map.setView(S.mapView.center, S.mapView.zoom, { animate: false });
+  else if (pts.length) map.fitBounds(pts, { padding: [30, 30], maxZoom: 8 });
+  else map.setView([50, 15], 4);
+  map.on('moveend', () => {
+    S.mapView = { center: map.getCenter(), zoom: map.getZoom() };
+    if (mapTab === 'list') debounceInView();
+  });
+  setupBoxSelect(map);
+  $('#m-select').onclick = () => setSelectMode(!S.mapSelectMode);
   renderMapSide();
   setTimeout(() => map.invalidateSize(), 50);
+  drawRoute(false);
+}
+const debounceInView = debounce(() => { if (mapTab === 'list') renderMapSide(); }, 150);
+function setSelectMode(on) {
+  S.mapSelectMode = on;
+  $('#m-select')?.classList.toggle('primary', on);
+  $('#m-hint')?.classList.toggle('hidden', !on);
+  $('#map')?.classList.toggle('selecting', on);
+}
+function refreshMarkers() {
+  for (const { m, a } of S.mapMarkers || []) {
+    const p = pkgById(a.pkg.id) || a.pkg;
+    a.pkg = p;
+    m.setStyle(markerStyle(p.enabled, S.mapSel.has(p.id)));
+    m.setRadius(S.mapSel.has(p.id) ? 8 : 6);
+  }
+}
+// Zaznaczanie przeciągnięciem: w trybie zaznaczania albo z wciśniętym Shift.
+// Shift/Ctrl dodaje do zaznaczenia, Alt odejmuje.
+function setupBoxSelect(map) {
+  const el = map.getContainer();
+  let start = null; let rect = null; let mode = 'replace';
+  el.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || !(S.mapSelectMode || e.shiftKey)) return;
+    if (e.target.closest('.leaflet-control, .leaflet-popup, .map-tools')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    map.dragging.disable();
+    start = map.mouseEventToLatLng(e);
+    mode = e.altKey ? 'remove' : (e.shiftKey || e.ctrlKey) ? 'add' : 'replace';
+    rect = L.rectangle([start, start], { color: cssVar('--acc', '#5cc4ff'), weight: 2, fillOpacity: 0.12, dashArray: '5 5', interactive: false }).addTo(map);
+  }, true);
+  const move = (e) => { if (start && rect) rect.setBounds(L.latLngBounds(start, map.mouseEventToLatLng(e))); };
+  const up = (e) => {
+    if (!start) return;
+    const bounds = L.latLngBounds(start, map.mouseEventToLatLng(e));
+    rect?.remove();
+    rect = null;
+    start = null;
+    map.dragging.enable();
+    const sw = map.latLngToContainerPoint(bounds.getSouthWest());
+    const ne = map.latLngToContainerPoint(bounds.getNorthEast());
+    if (Math.abs(sw.x - ne.x) < 6 && Math.abs(sw.y - ne.y) < 6) return;
+    const hit = new Set(S.mapMarkers.filter(({ a }) => bounds.contains([a.lat, a.lon])).map(({ a }) => a.pkg.id));
+    if (mode === 'replace') S.mapSel = hit;
+    else if (mode === 'add') hit.forEach((id) => S.mapSel.add(id));
+    else hit.forEach((id) => S.mapSel.delete(id));
+    mapTab = 'sel';
+    refreshMarkers();
+    renderMapSide();
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+  map.on('unload', () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); });
 }
 function popupHtml(a) {
   const p = a.pkg;
   return `<div class="pop">${p.thumbs[0] ? `<img src="${esc(thumbCache.get(p.thumbs[0]) || fileSrc(p.thumbs[0]))}" alt="">` : ''}
     <div class="pb"><div class="pt">${esc(p.title)}</div><div class="pd"><span class="mono">${esc(a.icao)}</span> · ${esc(a.name || '')}${a.city ? `, ${esc(a.city)}` : ''}</div>
-    <div class="pr"><button class="btn sm" data-pop-open>${esc(t('details'))}</button><span class="grow"></span><button class="switch ${p.enabled ? 'on' : ''}" data-pop-sw></button></div></div></div>`;
+    <div class="pr"><button class="btn sm" data-pop-open>${esc(t('details'))}</button><button class="btn sm ghost" data-pop-sel>${esc(S.mapSel.has(p.id) ? t('unselect') : t('selectOne'))}</button><span class="grow"></span><button class="switch ${p.enabled ? 'on' : ''}" data-pop-sw></button></div></div></div>`;
 }
-function bindPopup(popup, p) {
-  const el = popup.getElement();
+function bindPopup(map, p) {
+  const el = $('.leaflet-popup');
   if (!el) return;
   $('[data-pop-open]', el).onclick = () => openSheet(p.id);
-  $('[data-pop-sw]', el).onclick = async (e) => { e.target.classList.add('busy'); await toggle([p.id], !p.enabled); const map = S.map; if (map) { const c = map.getCenter(); const z = map.getZoom(); viewMap($('#view')); S.map.setView(c, z); } };
+  $('[data-pop-sel]', el).onclick = () => { if (S.mapSel.has(p.id)) S.mapSel.delete(p.id); else S.mapSel.add(p.id); map.closePopup(); mapTab = 'sel'; refreshMarkers(); renderMapSide(); };
+  $('[data-pop-sw]', el).onclick = async (e) => { e.target.classList.add('busy'); await toggle([p.id], !p.enabled); map.closePopup(); };
 }
 function renderMapSide() {
   const side = $('#map-side');
   if (!side) return;
   side.innerHTML = `<div class="head"><div class="seg" style="align-self:flex-start">
       <button data-mt="list" class="${mapTab === 'list' ? 'on' : ''}">${icon('list')}${esc(t('inView'))}</button>
-      <button data-mt="plan" class="${mapTab === 'plan' ? 'on' : ''}">${icon('target')}${esc(t('prepareFlight'))}</button></div></div>
+      <button data-mt="sel" class="${mapTab === 'sel' ? 'on' : ''}">${icon('select')}${esc(t('selectedTab', S.mapSel.size))}</button>
+      <button data-mt="plan" class="${mapTab === 'plan' ? 'on' : ''}">${icon('target')}${esc(t('planTab'))}</button></div></div>
     <div class="scroll" id="map-scroll"></div>`;
   $$('[data-mt]', side).forEach((b) => (b.onclick = () => setMapTab(b.dataset.mt)));
-  if (mapTab === 'plan') renderPlan(); else renderInView();
+  if (mapTab === 'plan') renderPlan(); else if (mapTab === 'sel') renderSelection(); else renderInView();
+}
+function sideList(items, removable) {
+  return items.slice(0, 400).map(({ p, icaos }) => `<div class="row click" data-id="${p.id}">
+      <div class="grow"><div class="t">${esc(p.title)}</div><div class="d mono">${esc(icaos.slice(0, 5).join(' · '))}${icaos.length > 5 ? ' …' : ''}</div></div>
+      ${removable ? `<button class="btn sm icon ghost" data-unsel="${p.id}" title="${esc(t('unselect'))}">${icon('close')}</button>` : ''}
+      <button class="switch ${p.enabled ? 'on' : ''}" data-sw="${p.id}"></button></div>`).join('');
+}
+function bindSideList(box) {
+  $$('[data-sw]', box).forEach((sw) => (sw.onclick = (e) => { e.stopPropagation(); const p = pkgById(sw.dataset.sw); if (p) toggle([p.id], !p.enabled); }));
+  $$('[data-unsel]', box).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); S.mapSel.delete(b.dataset.unsel); refreshMarkers(); renderMapSide(); }));
+  $$('[data-id]', box).forEach((r) => (r.onclick = () => {
+    const p = pkgById(r.dataset.id);
+    const a = p?.airports[0];
+    if (a && S.map) S.map.setView([a.lat, a.lon], Math.max(S.map.getZoom(), 10));
+  }));
+  $$('[data-id]', box).forEach((r) => (r.ondblclick = () => openSheet(r.dataset.id)));
+}
+function groupByPkg(filter) {
+  const seen = new Map();
+  for (const { a } of S.mapMarkers || []) {
+    const p = pkgById(a.pkg.id) || a.pkg;
+    if (!filter(p, a)) continue;
+    if (!seen.has(p.id)) seen.set(p.id, { p, icaos: [] });
+    seen.get(p.id).icaos.push(a.icao);
+  }
+  return [...seen.values()].sort((x, y) => (y.p.enabled - x.p.enabled) || x.p.title.localeCompare(y.p.title));
 }
 function renderInView() {
   const box = $('#map-scroll');
   if (!box || !S.map) return;
   const b = S.map.getBounds();
-  const seen = new Map();
-  for (const a of airportPoints()) if (b.contains([a.lat, a.lon])) { if (!seen.has(a.pkg.id)) seen.set(a.pkg.id, { p: a.pkg, icaos: [] }); seen.get(a.pkg.id).icaos.push(a.icao); }
-  const items = [...seen.values()].sort((x, y) => (y.p.enabled - x.p.enabled) || x.p.title.localeCompare(y.p.title));
+  const items = groupByPkg((p, a) => b.contains([a.lat, a.lon]));
   const offIds = items.filter((x) => !x.p.enabled).map((x) => x.p.id);
   const onIds = items.filter((x) => x.p.enabled && !x.p.meta.locked).map((x) => x.p.id);
-  box.innerHTML = `<div style="display:flex;gap:6px;padding:10px 16px">
+  box.innerHTML = `<div class="sel-actions">
       <button class="btn sm" id="iv-on" ${offIds.length ? '' : 'disabled'}>${icon('power')}${esc(t('enableAllN', offIds.length))}</button>
-      <button class="btn sm" id="iv-off" ${onIds.length ? '' : 'disabled'}>${icon('eyeoff')}${esc(t('disableAllN', onIds.length))}</button></div>
-    <div class="list">${items.slice(0, 300).map(({ p, icaos }) => `<div class="row click" data-id="${p.id}">
-      <div class="grow"><div class="t">${esc(p.title)}</div><div class="d mono">${esc(icaos.slice(0, 5).join(' · '))}${icaos.length > 5 ? ' …' : ''}</div></div>
-      <button class="switch ${p.enabled ? 'on' : ''}" data-sw="${p.id}"></button></div>`).join('') || `<div class="row"><div class="grow d">${esc(t('noAirportsInView'))}</div></div>`}</div>`;
-  $$('[data-sw]', box).forEach((sw) => (sw.onclick = async (e) => { e.stopPropagation(); const p = pkgById(sw.dataset.sw); const c = S.map.getCenter(); const z = S.map.getZoom(); await toggle([p.id], !p.enabled); if (S.view === 'map') { viewMap($('#view')); S.map.setView(c, z); } }));
-  $$('[data-id]', box).forEach((r) => (r.onclick = () => openSheet(r.dataset.id)));
+      <button class="btn sm" id="iv-off" ${onIds.length ? '' : 'disabled'}>${icon('eyeoff')}${esc(t('disableAllN', onIds.length))}</button>
+      <button class="btn sm ghost" id="iv-sel" ${items.length ? '' : 'disabled'}>${icon('select')}${esc(t('selectView'))}</button></div>
+    <div class="list">${sideList(items, false) || `<div class="row"><div class="grow d">${esc(t('noAirportsInView'))}</div></div>`}</div>`;
+  bindSideList(box);
   $('#iv-on').onclick = () => toggle(offIds, true, t('lblMapArea'));
   $('#iv-off').onclick = () => toggle(onIds, false, t('lblMapArea'));
+  $('#iv-sel').onclick = () => { items.forEach(({ p }) => S.mapSel.add(p.id)); mapTab = 'sel'; refreshMarkers(); renderMapSide(); };
+}
+function renderSelection() {
+  const box = $('#map-scroll');
+  if (!box) return;
+  const items = groupByPkg((p) => S.mapSel.has(p.id));
+  if (!items.length) {
+    box.innerHTML = `<div class="empty" style="padding:40px 20px">${icon('select')}<h3>${esc(t('noSelection'))}</h3><div style="font-size:13px">${esc(t('noSelectionHint'))}</div>
+      <button class="btn primary" id="sel-mode">${icon('select')}${esc(t('boxSelect'))}</button></div>`;
+    $('#sel-mode').onclick = () => setSelectMode(true);
+    return;
+  }
+  const offIds = items.filter((x) => !x.p.enabled).map((x) => x.p.id);
+  const onIds = items.filter((x) => x.p.enabled && !x.p.meta.locked).map((x) => x.p.id);
+  const size = items.reduce((s, x) => s + x.p.size, 0);
+  box.innerHTML = `<div style="padding:12px 16px 0" class="muted">${esc(t('selSummary', items.length, items.length - offIds.length, fmtSize(size)))}</div>
+    <div class="sel-actions">
+      <button class="btn sm primary" id="sel-on" ${offIds.length ? '' : 'disabled'}>${icon('power')}${esc(t('enableAllN', offIds.length))}</button>
+      <button class="btn sm" id="sel-off" ${onIds.length ? '' : 'disabled'}>${icon('eyeoff')}${esc(t('disableAllN', onIds.length))}</button>
+      <button class="btn sm" id="sel-only" title="${esc(t('onlySelectedHint'))}">${icon('target')}${esc(t('onlySelected'))}</button>
+      <button class="btn sm" id="sel-prof">${icon('profiles')}${esc(t('toProfile'))}</button>
+      <button class="btn sm ghost" id="sel-clear">${icon('close')}${esc(t('clearSelection'))}</button></div>
+    <div class="list">${sideList(items, true)}</div>`;
+  bindSideList(box);
+  $('#sel-on').onclick = () => toggle(offIds, true, t('lblMapSel'));
+  $('#sel-off').onclick = () => toggle(onIds, false, t('lblMapSel'));
+  $('#sel-only').onclick = () => {
+    const keep = new Set(items.map((x) => x.p.id));
+    const disable = S.scan.packages.filter((p) => p.enabled && catOf(p) === 'airport' && !keep.has(p.id) && !p.meta.locked).map((p) => p.id);
+    applyChanges(offIds, disable, t('lblMapSel'));
+  };
+  $('#sel-prof').onclick = () => addToProfileDialog(items.map((x) => x.p.id));
+  $('#sel-clear').onclick = () => { S.mapSel.clear(); refreshMarkers(); renderMapSide(); };
 }
 
 // Planowanie lotu: lotniska w promieniu od startu i celu (i opcjonalnie wzdłuż trasy).
@@ -929,16 +1170,14 @@ function renderPlanResult() {
       <button class="btn" id="pl-save">${icon('save')}${esc(t('saveAsProfile'))}</button></div>`;
   $('#pl-apply').onclick = async () => {
     const P = S.plan;
-    const c = S.map?.getCenter(); const z = S.map?.getZoom();
     await applyChanges(r.enable, r.disable, `${t('lblFlight')} ${[P.dep?.icao, P.arr?.icao].filter(Boolean).join(' → ')}`);
-    if (S.view === 'map' && c) { viewMap($('#view')); S.map.setView(c, z); setMapTab('plan'); }
   };
   $('#pl-save').onclick = () => {
     const keys = new Set(S.scan.packages.filter((p) => (p.enabled || r.enable.includes(p.id)) && !r.disable.includes(p.id)).map((p) => p.key));
     saveCurrentAsProfile([...keys], `${S.plan.dep?.icao || ''}${S.plan.arr ? ' → ' + S.plan.arr.icao : ''}`);
   };
 }
-function drawRoute() {
+function drawRoute(fit = true) {
   const g = S.mapLayers?.route;
   if (!g || !S.map) return;
   g.clearLayers();
@@ -950,8 +1189,8 @@ function drawRoute() {
   }
   if (P.dep && P.arr) {
     L.polyline(routePoints(P.dep, P.arr).map((q) => [q.lat, q.lon]), { ...style, dashArray: '6 6' }).addTo(g);
-    S.map.fitBounds([[P.dep.lat, P.dep.lon], [P.arr.lat, P.arr.lon]], { padding: [80, 80], maxZoom: 9 });
-  } else if (P.dep) S.map.setView([P.dep.lat, P.dep.lon], 8);
+    if (fit) S.map.fitBounds([[P.dep.lat, P.dep.lon], [P.arr.lat, P.arr.lon]], { padding: [80, 80], maxZoom: 9 });
+  } else if (P.dep && fit) S.map.setView([P.dep.lat, P.dep.lon], 8);
 }
 
 // ───────────── Profile ─────────────
@@ -1291,7 +1530,7 @@ function viewSettings(v) {
       ${row(esc(t('autoUpdate')), esc(t('autoUpdateD')), sw('autoUpdateCheck'))}
     </div>
     <div class="card set-card"><h3>${icon('eye')}${esc(t('setLook'))}</h3>
-      ${row(esc(t('theme')), '', `<select class="inp" id="st-theme" style="width:200px">${['dark', 'light', 'auto'].map((k) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${esc(t('theme_' + k))}</option>`).join('')}</select>`)}
+      ${row(esc(t('theme')), '', `<select class="inp" id="st-theme" style="width:200px">${['dark', 'amoled', 'light', 'auto'].map((k) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${esc(t('theme_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('accent')), '', `<div class="accent-pick">${['sky', 'amber', 'green', 'violet', 'rose'].map((a) => `<button data-acc="${a}" class="${s.accent === a ? 'on' : ''}" style="background:${{ sky: '#5cc4ff', amber: '#ffc35a', green: '#5fe0a0', violet: '#b7a2ff', rose: '#ff95b5' }[a]}"></button>`).join('')}</div>`)}
       ${row(esc(t('language')), '', `<select class="inp" id="st-lang" style="width:200px"><option value="pl" ${s.language === 'pl' ? 'selected' : ''}>Polski</option><option value="en" ${s.language === 'en' ? 'selected' : ''}>English</option></select>`)}
       ${row(esc(t('cardSize')), '', `<input type="range" id="st-card" min="190" max="360" step="10" value="${s.cardSize || 240}">`)}
@@ -1327,7 +1566,7 @@ function viewSettings(v) {
     await saveSettings(); await refresh();
   }));
   $('#st-lm').onchange = (e) => { s.linkMode = e.target.value; persist(); };
-  $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); };
+  $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));
   $('#st-lang').onchange = (e) => { s.language = e.target.value; setLang(s.language); persist(); renderRail(); renderView(); };
   $('#st-card').oninput = (e) => { s.cardSize = +e.target.value; applyTheme(); persist(); };
@@ -1400,6 +1639,8 @@ document.addEventListener('keydown', (e) => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
   if (e.key === 'Escape') {
     if (S.sheetId) closeSheet();
+    else if (S.view === 'map' && S.mapSelectMode) setSelectMode(false);
+    else if (S.view === 'map' && S.mapSel.size) { S.mapSel.clear(); refreshMarkers(); renderMapSide(); }
     else if (S.selecting) { S.selecting = false; S.sel.clear(); renderView(); }
     return;
   }

@@ -47,6 +47,12 @@ pub struct PackageInfo {
     pub dependencies: Vec<Dependency>,
     pub has_model: bool,
     pub has_panels: bool,
+    /// Pakiet ma model lotu (`flight_model.cfg` / `engines.cfg`) – to samolot, a nie malowanie.
+    pub has_flight_model: bool,
+    /// Nazwy folderów w `SimObjects/<rodzaj>/` – łączą malowania z samolotami.
+    pub sim_objects: Vec<String>,
+    /// Samoloty bazowe malowań (`base_container` w aircraft.cfg).
+    pub base_aircraft: Vec<String>,
     /// Data modyfikacji folderu (ms od 1970) – „data instalacji” w sortowaniu.
     pub modified: u64,
     pub error: String,
@@ -147,9 +153,10 @@ fn thumbnails(dir: &Path, files: &[(String, u64)]) -> Vec<String> {
     scored.into_iter().take(24).map(|(_, p)| dir.join(p).to_string_lossy().into_owned()).collect()
 }
 
-/// Tytuły wariantów z `aircraft.cfg` (sekcje `[FLTSIM.n]`).
-fn aircraft_titles(dir: &Path, files: &[(String, u64)]) -> Vec<String> {
+/// Tytuły wariantów z `aircraft.cfg` (sekcje `[FLTSIM.n]`) i samoloty bazowe (`base_container`).
+fn aircraft_titles(dir: &Path, files: &[(String, u64)]) -> (Vec<String>, Vec<String>) {
     let mut titles = vec![];
+    let mut bases: Vec<String> = vec![];
     for (p, _) in files.iter().filter(|(p, _)| p.to_lowercase().ends_with("aircraft.cfg")).take(40) {
         let Ok(bytes) = std::fs::read(dir.join(p)) else { continue };
         let text = String::from_utf8_lossy(&bytes);
@@ -159,6 +166,15 @@ fn aircraft_titles(dir: &Path, files: &[(String, u64)]) -> Vec<String> {
             if line.starts_with('[') {
                 in_fltsim = line.to_lowercase().starts_with("[fltsim.");
                 continue;
+            }
+            if let Some((k, v)) = line.split_once('=') {
+                if k.trim().eq_ignore_ascii_case("base_container") {
+                    let base = v.trim().trim_matches('"').replace('\\', "/");
+                    let base = base.trim_end_matches('/').rsplit('/').next().unwrap_or("").to_string();
+                    if !base.is_empty() && !bases.contains(&base) {
+                        bases.push(base);
+                    }
+                }
             }
             if !in_fltsim {
                 continue;
@@ -174,7 +190,23 @@ fn aircraft_titles(dir: &Path, files: &[(String, u64)]) -> Vec<String> {
         }
     }
     titles.truncate(60);
-    titles
+    (titles, bases)
+}
+
+/// Foldery obiektów: `SimObjects/Airplanes/PMDG 737-800/...` → „PMDG 737-800”.
+fn sim_objects(files: &[(String, u64)]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for (p, _) in files {
+        let mut parts = p.split('/');
+        let (Some(a), Some(_kind), Some(name), Some(_)) = (parts.next(), parts.next(), parts.next(), parts.next()) else { continue };
+        if a.eq_ignore_ascii_case("simobjects") && !out.iter().any(|o| o.eq_ignore_ascii_case(name)) {
+            out.push(name.to_string());
+            if out.len() >= 40 {
+                break;
+            }
+        }
+    }
+    out
 }
 
 fn airport_refs(dir: &Path, files: &[(String, u64)], name: &str, title: &str) -> Vec<AirportRef> {
@@ -223,14 +255,21 @@ fn airport_refs(dir: &Path, files: &[(String, u64)], name: &str, title: &str) ->
 }
 
 /// Kategoria na podstawie `content_type`, zawartości i nazwy.
-pub fn categorize(content_type: &str, name: &str, files: &[(String, u64)], airports: usize, has_model: bool) -> String {
+///
+/// Samolot od malowania odróżnia model lotu: `flight_model.cfg` / `engines.cfg` ma tylko prawdziwy
+/// samolot. Malowania (także te z własnymi fragmentami modelu) mają same tekstury, `livery.cfg`
+/// albo `base_container`. Pakiet AIRCRAFT bez modelu lotu i bez tekstur to obiekty pomocnicze.
+pub fn categorize(content_type: &str, name: &str, files: &[(String, u64)], airports: usize, has_flight_model: bool, has_base: bool) -> String {
     let ct = content_type.to_uppercase();
     let lname = name.to_lowercase();
     let has = |needle: &str| files.iter().any(|(p, _)| p.to_lowercase().contains(needle));
+    let has_textures = || has_base || has("/texture.") || has("livery.cfg") || has("/liveries/");
     let cat = match ct.as_str() {
         "LIVERY" => "livery",
-        "AIRCRAFT" if !has_model || lname.contains("livery") || lname.contains("liveries") || lname.contains("-paint") => "livery",
-        "AIRCRAFT" => "aircraft",
+        "AIRCRAFT" if has_flight_model => "aircraft",
+        "AIRCRAFT" if has("html_ui/") || has("/panel/") => "utility",
+        "AIRCRAFT" if has_textures() || lname.contains("livery") || lname.contains("liveries") => "livery",
+        "AIRCRAFT" => "other",
         "SCENERY" if airports > 0 => "airport",
         "SCENERY" if lname.contains("lib") || lname.contains("library") || lname.contains("objects") => "library",
         "SCENERY" => "scenery",
@@ -243,7 +282,7 @@ pub fn categorize(content_type: &str, name: &str, files: &[(String, u64)], airpo
         }
         _ => {
             if has("simobjects/airplanes/") || has("simobjects/rotorcraft/") {
-                if has_model { "aircraft" } else { "livery" }
+                if has_flight_model { "aircraft" } else { "livery" }
             } else if airports > 0 {
                 "airport"
             } else if has("ingamepanels/") || has("html_ui/") {
@@ -288,15 +327,20 @@ pub fn read(dir: &Path) -> PackageInfo {
         l.contains("/model") && (l.ends_with(".gltf") || l.ends_with(".bin") || l.ends_with(".xml"))
     });
     info.has_panels = files.iter().any(|(p, _)| p.to_lowercase().starts_with("ingamepanels/"));
+    info.has_flight_model = files.iter().any(|(p, _)| {
+        let l = p.to_lowercase();
+        l.ends_with("/flight_model.cfg") || l.ends_with("/engines.cfg")
+    });
+    info.sim_objects = sim_objects(&files);
     info.thumbs = thumbnails(dir, &files);
     let is_aircraft = info.content_type == "AIRCRAFT" || info.content_type == "LIVERY";
     if is_aircraft || files.iter().any(|(p, _)| p.to_lowercase().ends_with("aircraft.cfg")) {
-        info.aircraft = aircraft_titles(dir, &files);
+        (info.aircraft, info.base_aircraft) = aircraft_titles(dir, &files);
     }
     if !is_aircraft {
         info.airports = airport_refs(dir, &files, &name, &info.title);
     }
-    info.category = categorize(&info.content_type, &name, &files, info.airports.len(), info.has_model);
+    info.category = categorize(&info.content_type, &name, &files, info.airports.len(), info.has_flight_model, !info.base_aircraft.is_empty());
     if info.title.is_empty() || is_junk_title(&info.title) {
         info.title = pretty_name(&name);
     }
@@ -407,6 +451,7 @@ mod tests {
         write(&pkg.join("manifest.json"), r#"{"title":"C172 Classic","creator":"Vendor","package_version":"1.2.0","content_type":"AIRCRAFT","dependencies":[{"name":"vendor-lib","package_version":"1.0.0"}]}"#);
         write(&pkg.join("SimObjects/Airplanes/C172/aircraft.cfg"), "[FLTSIM.0]\ntitle = \"C172 Blue\" ; komentarz\n[FLTSIM.1]\ntitle=C172 Red\n[GENERAL]\ntitle=nie\n");
         write(&pkg.join("SimObjects/Airplanes/C172/model/c172.xml"), "<x/>");
+        write(&pkg.join("SimObjects/Airplanes/C172/flight_model.cfg"), "[x]");
         write(&pkg.join("SimObjects/Airplanes/C172/texture.blue/thumbnail.jpg"), "jpg");
         write(&pkg.join("ContentInfo/vendor-aircraft-c172/Thumbnail.jpg"), "jpg");
         let info = read(&pkg);
@@ -417,14 +462,31 @@ mod tests {
         assert!(info.thumbs[0].replace('\\', "/").ends_with("ContentInfo/vendor-aircraft-c172/Thumbnail.jpg"));
         assert!(!info.has_layout);
 
+        assert_eq!(info.sim_objects, vec!["C172"]);
         let n = generate_layout(&pkg).unwrap();
-        assert_eq!(n, 4);
+        assert_eq!(n, 5);
         let again = read(&pkg);
         assert!(again.has_layout);
-        assert_eq!(again.files, 4);
+        assert_eq!(again.files, 5);
         let m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(pkg.join("manifest.json")).unwrap()).unwrap();
         assert_eq!(m["total_package_size"].as_str().unwrap().len(), 20);
         assert_eq!(m["title"], "C172 Classic");
+    }
+
+    #[test]
+    fn livery_base() {
+        let dir = tempfile::tempdir().unwrap();
+        let pkg = dir.path().join("pmdg-aircraft-738-liveries");
+        write(&pkg.join("manifest.json"), r#"{"title":"Liveries","content_type":"AIRCRAFT"}"#);
+        write(&pkg.join("SimObjects/Airplanes/PMDG 737-800 LOT/aircraft.cfg"), r#"[VARIATION]
+base_container = "..\PMDG 737-800"
+[FLTSIM.0]
+title=737 LOT
+"#);
+        write(&pkg.join("SimObjects/Airplanes/PMDG 737-800 LOT/texture.LOT/a.dds"), "x");
+        let info = read(&pkg);
+        assert_eq!(info.category, "livery");
+        assert_eq!(info.base_aircraft, vec!["PMDG 737-800"]);
     }
 
     #[test]
@@ -436,10 +498,12 @@ mod tests {
     #[test]
     fn livery_and_utility() {
         let files = vec![("SimObjects/Airplanes/X/texture.lot/thumbnail.jpg".to_string(), 1u64)];
-        assert_eq!(categorize("AIRCRAFT", "lot-livery-a320", &files, 0, false), "livery");
-        assert_eq!(categorize("MISC", "pms50-gtn750", &[], 0, false), "utility");
-        assert_eq!(categorize("SCENERY", "x-airport-epwa", &[], 1, false), "airport");
-        assert_eq!(categorize("SCENERY", "x-landmarks", &[], 0, false), "scenery");
+        assert_eq!(categorize("AIRCRAFT", "inibuilds-aircraft-a350-900-lh", &files, 0, false, false), "livery");
+        assert_eq!(categorize("AIRCRAFT", "pmdg-aircraft-738", &files, 0, true, false), "aircraft");
+        assert_eq!(categorize("AIRCRAFT", "orbx-volanta-aerocaches", &[], 0, false, false), "other");
+        assert_eq!(categorize("MISC", "pms50-gtn750", &[], 0, false, false), "utility");
+        assert_eq!(categorize("SCENERY", "x-airport-epwa", &[], 1, false, false), "airport");
+        assert_eq!(categorize("SCENERY", "x-landmarks", &[], 0, false, false), "scenery");
     }
 
     #[test]
