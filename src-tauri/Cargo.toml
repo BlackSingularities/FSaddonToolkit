@@ -1,6 +1,6 @@
 [package]
 name = "fs-addon-toolkit"
-version = "1.1.0"
+version = "1.2.0"
 description = "FS Addon Toolkit – menedżer dodatków Community dla Microsoft Flight Simulator 2024 i 2020"
 authors = ["Adam Rędzikowski"]
 license = "MIT"

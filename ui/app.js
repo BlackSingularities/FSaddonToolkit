@@ -170,9 +170,42 @@ async function setMeta(p, patch) {
 }
 
 // ───────────── Przełączanie ─────────────
+// Przy włączaniu samolotu pytamy o jego malowania (osobne dodatki), przy wyłączaniu – czy je też wyłączyć.
+async function withLiveries(ids, on) {
+  const mode = S.settings.liveryPrompt || 'ask';
+  const extra = [];
+  const seen = new Set(ids);
+  for (const id of ids) {
+    const p = pkgById(id);
+    if (!p || catOf(p) !== 'aircraft') continue;
+    for (const l of relatedOf(p)) if (l.enabled !== on && !seen.has(l.id)) { seen.add(l.id); extra.push(l); }
+  }
+  if (!extra.length || (on && mode === 'none')) return ids;
+  if (on && mode === 'all') return [...ids, ...extra.map((l) => l.id)];
+  const planes = ids.map(pkgById).filter((p) => p && catOf(p) === 'aircraft').map((p) => p.title).join(', ');
+  const r = await dialog({
+    title: on ? t('liveryQOn', planes) : t('liveryQOff', planes),
+    body: `<div>${esc(on ? t('liveryQOnD', `${extra.length} ${plural(extra.length, t('liv1'), t('liv2'), t('liv5'))}`) : t('liveryQOffD', extra.length))}</div>
+      <div style="display:flex;gap:8px"><button class="btn sm" id="lv-all">${esc(t('selectAll'))}</button><button class="btn sm ghost" id="lv-none">${esc(t('selectNone'))}</button></div>
+      <div class="card list" style="max-height:360px;overflow:auto">${extra.map((l) => `<label class="rel" style="cursor:pointer"><input type="checkbox" value="${l.id}" ${on ? 'checked' : 'checked'} style="accent-color:var(--acc);width:16px;height:16px">
+        <div class="th">${l.thumbs[0] ? `<img data-src="${esc(l.thumbs[0])}" alt="">` : ''}</div><div class="grow"><b>${esc(l.title)}</b><small>${esc(l.creator || l.folder)} · ${fmtSize(l.size)}${l.aircraft.length ? ` · ${l.aircraft.length} ${esc(t('variantsShort'))}` : ''}</small></div></label>`).join('')}</div>
+      ${on ? `<div class="faint" style="font-size:12px">${esc(t('liveryPromptHint'))}</div>` : ''}`,
+    wide: true,
+    actions: [{ label: t('cancel'), value: null }, { label: on ? t('withoutLiveries') : t('keepLiveries'), value: [] }, { label: on ? t('enableSelected') : t('disableSelected'), kind: 'primary', value: (w) => $$('input:checked', w).map((i) => i.value) }],
+    onOpen: (w) => {
+      observeThumbs(w);
+      $('#lv-all', w).onclick = () => $$('input', w).forEach((i) => (i.checked = true));
+      $('#lv-none', w).onclick = () => $$('input', w).forEach((i) => (i.checked = false));
+    },
+  });
+  if (r === null) return null;
+  return [...ids, ...r];
+}
 async function toggle(ids, on, label) {
   ids = ids.filter((id) => { const p = pkgById(id); return p && p.enabled !== on; });
   if (!ids.length) return;
+  ids = await withLiveries(ids, on);
+  if (!ids) return;
   ids.forEach((id) => S.busy.add(id));
   ids.forEach((id) => $$(`[data-sw="${id}"]`).forEach((sw) => { sw.classList.add('busy'); sw.classList.toggle('on', on); }));
   try {
@@ -445,7 +478,7 @@ function cardHtml(p) {
     </div>
     <div class="body">
       <div class="t" title="${esc(p.title)}">${p.meta.favorite ? `<span class="star">★</span> ` : ''}${esc(p.title)}</div>
-      <div class="d">${esc(p.creator || p.folder)}</div>
+      <div class="d">${cat === 'livery' && relatedOf(p)[0] ? `↳ ${esc(relatedOf(p)[0].title)}` : esc(p.creator || p.folder)}</div>
       <div class="m"><span style="color:${catColor(cat)}">●</span><span>${esc(t('cat_' + cat))}</span><span class="grow"></span>${p.version ? `<span>v${esc(p.version)}</span>` : ''}<span>${fmtSize(p.size)}</span></div>
     </div></div>`;
 }
@@ -1194,9 +1227,17 @@ function drawRoute(fit = true) {
 }
 
 // ───────────── Profile ─────────────
+const catChecks = (id, selected) => `<div class="field" style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--text-3)">${esc(t('profileScope'))}
+  <div class="chips" id="${id}">${CATS.map((c) => `<label class="chip ${!selected?.length || selected.includes(c.id) ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" value="${c.id}" ${!selected?.length || selected.includes(c.id) ? 'checked' : ''} style="display:none">${icon(c.id)}${esc(t('cat_' + c.id))}</label>`).join('')}</div>
+  <span class="faint" style="font-size:12px">${esc(t('profileScopeHint'))}</span></div>`;
+const bindCatChecks = (w, id) => $$(`#${id} label`, w).forEach((l) => (l.onclick = (e) => { e.preventDefault(); const i = $('input', l); i.checked = !i.checked; l.classList.toggle('on', i.checked); }));
+// Zakres: puste albo wszystkie kategorie = profil zarządza wszystkim.
+const readCatChecks = (w, id) => { const all = $$(`#${id} input`, w); const on = all.filter((i) => i.checked).map((i) => i.value); return on.length === all.length ? [] : on; };
+const inScope = (prof, p) => !prof.categories?.length || prof.categories.includes(catOf(p));
+const scopeLabel = (prof) => (prof.categories?.length ? prof.categories.map((c) => t('cat_' + c)).join(', ') : '');
 function profileMatch(prof) {
   if (!S.scan) return 0;
-  const on = new Set(S.scan.packages.filter((p) => p.enabled).map((p) => p.key));
+  const on = new Set(S.scan.packages.filter((p) => p.enabled && inScope(prof, p)).map((p) => p.key));
   const want = new Set(prof.packages);
   if (!want.size && !on.size) return 1;
   let hit = 0;
@@ -1215,7 +1256,7 @@ function profileDiff(prof, additive = false) {
   }
   const enable = [...want].map((k) => byKey.get(k)).filter((p) => p && !p.enabled).map((p) => p.id);
   const missing = [...want].filter((k) => !byKey.has(k));
-  const disable = additive ? [] : S.scan.packages.filter((p) => p.enabled && !want.has(p.key) && !p.meta.locked).map((p) => p.id);
+  const disable = additive ? [] : S.scan.packages.filter((p) => p.enabled && inScope(prof, p) && !want.has(p.key) && !p.meta.locked).map((p) => p.id);
   return { enable, disable, missing };
 }
 async function applyProfile(id, additive = false) {
@@ -1226,7 +1267,7 @@ async function applyProfile(id, additive = false) {
   if (S.settings.confirmBulk && d.enable.length + d.disable.length > 0) {
     const list = (ids, cls, sign) => ids.slice(0, 40).map((x) => pkgById(x)).filter(Boolean).map((p) => `<div class="row"><span class="tag ${cls}">${sign}</span><div class="grow"><div class="t" style="font-size:13px">${esc(p.title)}</div></div></div>`).join('');
     const ok = await confirmBox(`${t('apply')}: ${prof.name}`,
-      `<div><span class="tag ok">+${d.enable.length}</span> <span class="tag bad">−${d.disable.length}</span>${d.missing.length ? ` <span class="tag warn">${esc(t('missingN', d.missing.length))}</span>` : ''}</div>
+      `${prof.categories?.length ? `<div class="banner acc" style="margin:0">${icon('filter')}<div>${esc(t('scopeOnly', scopeLabel(prof)))}</div></div>` : ''}<div><span class="tag ok">+${d.enable.length}</span> <span class="tag bad">−${d.disable.length}</span>${d.missing.length ? ` <span class="tag warn">${esc(t('missingN', d.missing.length))}</span>` : ''}</div>
        <div class="diff" style="max-height:340px;overflow:auto">${list(d.enable, 'ok', '+')}${list(d.disable, 'bad', '−')}</div>`, t('apply'));
     if (!ok) return;
   }
@@ -1244,22 +1285,25 @@ async function applyProfile(id, additive = false) {
 async function saveProfiles() {
   try { S.profiles = await invoke('save_profiles', { profiles: S.profiles }); } catch (e) { toast(errMsg(e), 'bad'); }
 }
-async function saveCurrentAsProfile(keys, suggested = '') {
+async function saveCurrentAsProfile(keys, suggested = '', scope = []) {
   const r = await dialog({
     title: t('newProfile'),
     body: `<label class="field">${esc(t('name'))}<input class="inp" id="np-name" value="${esc(suggested)}" placeholder="${esc(t('profileNamePh'))}"></label>
       <label class="field">${esc(t('note'))}<input class="inp" id="np-note"></label>
       <div class="swatches" id="np-col">${PROFILE_COLORS.map((c, i) => `<button style="background:${c}" data-c="${c}" class="${i === 0 ? 'on' : ''}"></button>`).join('')}</div>
+      ${catChecks('np-cats', scope)}
       ${S.scan.installation?.contentXml ? `<label class="check-row"><input type="checkbox" id="np-off">${esc(t('includeOfficial'))}</label>` : ''}`,
-    actions: [{ label: t('cancel'), value: null }, { label: t('save'), kind: 'primary', value: (w) => ({ name: $('#np-name', w).value.trim(), note: $('#np-note', w).value.trim(), color: $('#np-col .on', w)?.dataset.c, official: $('#np-off', w)?.checked }) }],
-    onOpen: (w) => $$('#np-col button', w).forEach((b) => (b.onclick = () => { $$('#np-col button', w).forEach((x) => x.classList.remove('on')); b.classList.add('on'); })),
+    actions: [{ label: t('cancel'), value: null }, { label: t('save'), kind: 'primary', value: (w) => ({ name: $('#np-name', w).value.trim(), note: $('#np-note', w).value.trim(), color: $('#np-col .on', w)?.dataset.c, official: $('#np-off', w)?.checked, categories: readCatChecks(w, 'np-cats') }) }],
+    onOpen: (w) => { $$('#np-col button', w).forEach((b) => (b.onclick = () => { $$('#np-col button', w).forEach((x) => x.classList.remove('on')); b.classList.add('on'); })); bindCatChecks(w, 'np-cats'); },
   });
   if (!r || !r.name) return;
   let officialDisabled = [];
   if (r.official) {
     try { const l = await invoke('official_list'); officialDisabled = l.packages.filter((o) => !o.enabled).map((o) => o.name); } catch { /* bez oficjalnych */ }
   }
-  S.profiles.push({ id: '', name: r.name, note: r.note, color: r.color, packages: keys || S.scan.packages.filter((p) => p.enabled).map((p) => p.key), officialDisabled, created: '', updated: '' });
+  const prof = { categories: r.categories };
+  const base = keys ? keys.map((k) => S.scan.packages.find((p) => p.key === k)).filter(Boolean) : S.scan.packages.filter((p) => p.enabled);
+  S.profiles.push({ id: '', name: r.name, note: r.note, color: r.color, categories: r.categories, packages: base.filter((p) => inScope(prof, p)).map((p) => p.key), officialDisabled, created: '', updated: '' });
   await saveProfiles();
   toast(t('profileSaved', r.name));
   if (S.view === 'profiles' || S.view === 'dashboard') renderView();
@@ -1296,6 +1340,7 @@ function viewProfiles(v) {
       <div style="display:flex;align-items:center;gap:8px"><h3 style="flex:1">${esc(p.name)}</h3>${match === 1 ? `<span class="tag ok">${icon('check')}${esc(t('active'))}</span>` : `<span class="tag">${Math.round(match * 100)}%</span>`}</div>
       ${p.note ? `<div class="muted" style="font-size:13px">${esc(p.note)}</div>` : ''}
       <div class="faint" style="font-size:12.5px">${pk.length} ${esc(plural(pk.length, t('pkg1'), t('pkg2'), t('pkg5')))} · ${fmtSize(pk.reduce((a, x) => a + x.size, 0))}${missing ? ` · <span style="color:var(--warn)">${esc(t('missingN', missing))}</span>` : ''}${p.officialDisabled?.length ? ` · ${esc(t('officialOffN', p.officialDisabled.length))}` : ''}</div>
+      ${p.categories?.length ? `<div class="faint" style="font-size:12.5px;display:flex;gap:6px;align-items:center">${icon('filter')}${esc(t('scopeOnly', scopeLabel(p)))}</div>` : ''}
       <div class="cats">${cats.map(([c, n]) => `<span class="tag" style="color:${c.color}">${icon(c.id)}${n}</span>`).join('')}</div>
       <div class="acts">
         <button class="btn sm primary" data-a="apply">${icon('check')}${esc(t('apply'))}</button>
@@ -1317,16 +1362,17 @@ function viewProfiles(v) {
       if (a === 'add') applyProfile(prof.id, true);
       if (a === 'update') {
         if (!(await confirmBox(t('updateFromCurrent'), `<div>${esc(t('updateFromCurrentQ', prof.name))}</div>`))) return;
-        prof.packages = S.scan.packages.filter((p) => p.enabled).map((p) => p.key); prof.updated = '';
+        prof.packages = S.scan.packages.filter((p) => p.enabled && inScope(prof, p)).map((p) => p.key); prof.updated = '';
         await saveProfiles(); renderView(); toast(t('profileSaved', prof.name));
       }
       if (a === 'edit') {
         const r = await dialog({
           title: t('edit'),
           body: `<label class="field">${esc(t('name'))}<input class="inp" id="ep-name" value="${esc(prof.name)}"></label><label class="field">${esc(t('note'))}<input class="inp" id="ep-note" value="${esc(prof.note || '')}"></label>
-            <div class="swatches" id="ep-col">${PROFILE_COLORS.map((c) => `<button style="background:${c}" data-c="${c}" class="${prof.color === c ? 'on' : ''}"></button>`).join('')}</div>`,
-          actions: [{ label: t('cancel'), value: null }, { label: t('save'), kind: 'primary', value: (w) => ({ name: $('#ep-name', w).value.trim(), note: $('#ep-note', w).value.trim(), color: $('#ep-col .on', w)?.dataset.c || prof.color }) }],
-          onOpen: (w) => $$('#ep-col button', w).forEach((x) => (x.onclick = () => { $$('#ep-col button', w).forEach((y) => y.classList.remove('on')); x.classList.add('on'); })),
+            <div class="swatches" id="ep-col">${PROFILE_COLORS.map((c) => `<button style="background:${c}" data-c="${c}" class="${prof.color === c ? 'on' : ''}"></button>`).join('')}</div>
+            ${catChecks('ep-cats', prof.categories)}`,
+          actions: [{ label: t('cancel'), value: null }, { label: t('save'), kind: 'primary', value: (w) => ({ name: $('#ep-name', w).value.trim(), note: $('#ep-note', w).value.trim(), color: $('#ep-col .on', w)?.dataset.c || prof.color, categories: readCatChecks(w, 'ep-cats') }) }],
+          onOpen: (w) => { $$('#ep-col button', w).forEach((x) => (x.onclick = () => { $$('#ep-col button', w).forEach((y) => y.classList.remove('on')); x.classList.add('on'); })); bindCatChecks(w, 'ep-cats'); },
         });
         if (!r || !r.name) return;
         Object.assign(prof, r, { updated: '' }); await saveProfiles(); renderView();
@@ -1527,6 +1573,7 @@ function viewSettings(v) {
       ${row(esc(t('linkMode')), esc(t('linkModeD')), `<select class="inp" id="st-lm" style="width:240px"><option value="junction" ${s.linkMode !== 'symlink' ? 'selected' : ''}>${esc(t('junction'))}</option><option value="symlink" ${s.linkMode === 'symlink' ? 'selected' : ''}>${esc(t('symlink'))}</option></select>`)}
       ${row(esc(t('blockRunning')), esc(t('blockRunningD')), sw('blockWhileRunning'))}
       ${row(esc(t('confirmBulk')), esc(t('confirmBulkD')), sw('confirmBulk'))}
+      ${row(esc(t('liveryPrompt')), esc(t('liveryPromptD')), `<select class="inp" id="st-lp" style="width:240px">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.liveryPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('lp_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('autoUpdate')), esc(t('autoUpdateD')), sw('autoUpdateCheck'))}
     </div>
     <div class="card set-card"><h3>${icon('eye')}${esc(t('setLook'))}</h3>
@@ -1566,6 +1613,7 @@ function viewSettings(v) {
     await saveSettings(); await refresh();
   }));
   $('#st-lm').onchange = (e) => { s.linkMode = e.target.value; persist(); };
+  $('#st-lp').onchange = (e) => { s.liveryPrompt = e.target.value; persist(); };
   $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));
   $('#st-lang').onchange = (e) => { s.language = e.target.value; setLang(s.language); persist(); renderRail(); renderView(); };

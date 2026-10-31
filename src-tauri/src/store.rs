@@ -52,6 +52,8 @@ pub struct Settings {
     /// żeby po wyłączeniu dało się je włączyć z powrotem.
     pub external: Vec<String>,
     pub onboarded: bool,
+    /// Malowania przy włączaniu samolotu: "ask" | "all" | "none".
+    pub livery_prompt: String,
 }
 
 impl Default for Settings {
@@ -76,6 +78,7 @@ impl Default for Settings {
             meta: HashMap::new(),
             external: vec![],
             onboarded: false,
+            livery_prompt: "ask".into(),
         }
     }
 }
@@ -91,6 +94,8 @@ pub struct Profile {
     pub packages: Vec<String>,
     /// Pakiety oficjalne, które profil wyłącza (z Content.xml).
     pub official_disabled: Vec<String>,
+    /// Kategorie, którymi profil zarządza (puste = wszystkie). Pakietów spoza zakresu profil nie rusza.
+    pub categories: Vec<String>,
     pub created: String,
     pub updated: String,
 }

@@ -1,6 +1,13 @@
 // Teksty interfejsu (polski i angielski). `{0}`, `{1}` – kolejne argumenty t().
 
 const PL = {
+  profileScope: 'Czym zarządza profil', profileScopeHint: 'Pakietów z odznaczonych kategorii profil nie włącza ani nie wyłącza – np. same lotniska, bez ruszania samolotów.',
+  scopeOnly: 'Tylko: {0} – reszta zostaje bez zmian',
+  liveryQOn: 'Malowania do: {0}', liveryQOff: 'Wyłączyć też malowania? {0}', liveryQOnD: 'Ten samolot ma {0} jako osobne dodatki. Które włączyć razem z nim?', liv1: 'malowanie', liv2: 'malowania', liv5: 'malowań',
+  liveryQOffD: 'Włączonych malowań tego samolotu: {0}. Bez samolotu są bezużyteczne – zaznaczone zostaną wyłączone.',
+  selectNone: 'Żadne', variantsShort: 'wariantów', withoutLiveries: 'Bez malowań', keepLiveries: 'Zostaw włączone', enableSelected: 'Włącz zaznaczone', disableSelected: 'Wyłącz zaznaczone',
+  liveryPromptHint: 'Domyślne zachowanie zmienisz w Ustawieniach → Działanie.', liveryPrompt: 'Malowania przy włączaniu samolotu', liveryPromptD: 'Co zrobić z malowaniami, które są osobnymi dodatkami',
+  lp_ask: 'Pytaj, które włączyć', lp_all: 'Włączaj wszystkie', lp_none: 'Nie ruszaj',
   theme_amoled: 'AMOLED (czarny)',
   routeNative: 'leży w', routeLoaded: 'wczytuje przy starcie', routeLinked: 'łącze', routeNoLink: 'brak łącza',
   powerOnTitle: 'Włączony w symulatorze', powerOffTitle: 'Wyłączony', powerOnLink: 'Community → łącze do biblioteki', powerOnNative: 'Leży bezpośrednio w Community', powerOff: 'Kliknij, aby włączyć w MSFS',
@@ -105,6 +112,13 @@ const PL = {
 };
 
 const EN = {
+  profileScope: 'What the profile manages', profileScopeHint: 'Packages from unchecked categories are never enabled or disabled by the profile – e.g. airports only, aircraft untouched.',
+  scopeOnly: 'Only: {0} – everything else stays as it is',
+  liveryQOn: 'Liveries for: {0}', liveryQOff: 'Disable liveries too? {0}', liveryQOnD: 'This aircraft has {0} as separate add-ons. Which should be enabled with it?', liv1: 'livery', liv2: 'liveries', liv5: 'liveries',
+  liveryQOffD: 'Enabled liveries of this aircraft: {0}. They are useless without it – the checked ones will be disabled.',
+  selectNone: 'None', variantsShort: 'variants', withoutLiveries: 'Without liveries', keepLiveries: 'Keep enabled', enableSelected: 'Enable selected', disableSelected: 'Disable selected',
+  liveryPromptHint: 'Change the default in Settings → Behaviour.', liveryPrompt: 'Liveries when enabling an aircraft', liveryPromptD: 'What to do with liveries that are separate add-ons',
+  lp_ask: 'Ask which to enable', lp_all: 'Enable all', lp_none: 'Leave untouched',
   theme_amoled: 'AMOLED (black)',
   routeNative: 'lives in', routeLoaded: 'loads at startup', routeLinked: 'link', routeNoLink: 'no link',
   powerOnTitle: 'Enabled in the simulator', powerOffTitle: 'Disabled', powerOnLink: 'Community → link to the library', powerOnNative: 'Lives directly in Community', powerOff: 'Click to enable in MSFS',

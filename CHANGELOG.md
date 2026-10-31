@@ -1,5 +1,11 @@
 # Zmiany
 
+## 1.2.0
+
+- Zakres profilu: profil może zarządzać tylko wybranymi kategoriami (np. same lotniska) – samolotów i reszty wtedy nie rusza.
+- Malowania przy samolocie: przy włączaniu samolotu okno z jego malowaniami (miniatury, zaznacz wszystkie/żadne), przy wyłączaniu pytanie, czy wyłączyć też malowania; domyślne zachowanie w ustawieniach (pytaj / włączaj wszystkie / nie ruszaj).
+- Kafelek malowania pokazuje, do którego samolotu należy.
+
 ## 1.1.0
 
 - Miniatury na kafelkach nie znikają już po chwili.
