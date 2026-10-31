@@ -1,5 +1,13 @@
 # Zmiany
 
+## 1.1.0
+
+- Miniatury na kafelkach nie znikają już po chwili.
+- Samoloty i malowania rozpoznawane po modelu lotu (`flight_model.cfg` / `engines.cfg`); malowania powiązane z samolotami, licznik malowań na kafelku i lista w szczegółach z włączaniem wszystkich naraz.
+- Motyw AMOLED (czarny).
+- Nowy widok szczegółów: duże zdjęcie z nazwą, pasek miniatur, duży przełącznik, kafelki parametrów, schemat „biblioteka → łącze → Community”, tagi jako żetony.
+- Mapa: każde lotnisko jako osobny punkt, zaznaczanie przeciągnięciem (tryb zaznaczania albo Shift), włączanie i wyłączanie zaznaczonych, „tylko te lotniska”; zmiana podkładu i przełączanie dodatków nie resetują widoku.
+
 ## 1.0.0 – pierwsze wydanie
 
 - Włączanie i wyłączanie dodatków MSFS 2024 i 2020 (Steam i Microsoft Store) jednym kliknięciem.
