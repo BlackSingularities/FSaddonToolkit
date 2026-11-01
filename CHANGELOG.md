@@ -1,5 +1,14 @@
 # Zmiany
 
+## 1.3.0
+
+- Nowy pulpit: kafelki z najważniejszymi liczbami (aktywne, ładowany rozmiar, lotniska i kraje, samoloty i malowania, źródła, problemy) oraz panele kategorii, bibliotek, profili, lotnisk wg krajów, twórców, największych dodatków, kondycji, dysków i ostatniej aktywności – wiersze prowadzą do przefiltrowanej listy.
+- Flagi krajów przy kodach ICAO; wyszukiwanie także po nazwie kraju.
+- Lotniska można grupować po krajach („Wg krajów”) – zwijane grupy z przełącznikiem całego kraju.
+- Nowe kafelki dodatków: tytuł na zdjęciu, szklane etykiety, kolorowa kategoria, źródło i rozmiar w stopce.
+- Odświeżony, bardziej zwarty interfejs: mniejsze paski i kontrolki, wyraźna aktywna zakładka, nowy przycisk uruchamiania symulatora.
+- Podkład mapy wybiera się w ustawieniach.
+
 ## 1.2.1
 
 - Start bez ponownego czytania całej bazy: pamięć podręczna skanu wczytuje się także po aktualizacji aplikacji (nowe pola nie unieważniają jej w całości), więc czytane są tylko nowe i zmienione dodatki.

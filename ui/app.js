@@ -49,6 +49,7 @@ const S = {
   info: {}, settings: {}, installs: [], scan: null, profiles: [], issues: null, official: null, history: null,
   status: { running: false, disks: [] },
   view: 'dashboard',
+  collapsed: new Set(),
   f: { cat: 'all', state: 'all', source: 'all', q: '', fav: false, sort: 'title', dir: 1 },
   selecting: false, sel: new Set(),
   sheetId: null, busy: new Set(),
@@ -282,11 +283,10 @@ function renderRail() {
       <span class="pill">${icon(ic)}</span>${esc(t('nav_' + v))}
       ${v === 'health' && (errs || warns) ? `<span class="badge ${errs ? '' : 'warn'}">${errs || warns}</span>` : ''}</button>`).join('')}
     <div class="spacer"></div>
-    <div class="sim-chip" title="${esc(inst?.label || '')}">
-      <span class="sim-dot ${S.status.running ? 'on' : ''}"></span>
+    <button class="sim-chip ${S.status.running ? 'on' : ''}" id="launch" ${!inst || S.status.running ? 'disabled' : ''} title="${esc(inst ? `${t('launch')} – ${inst.label || ''}` : t('noSim'))}">
+      <span class="pill">${icon('play')}<span class="sim-dot"></span></span>
       <small>${esc(S.status.running ? t('simRunning') : inst ? `MSFS ${inst.sim}` : t('noSim'))}</small>
-      <button class="launch" id="launch" ${!inst || S.status.running ? 'disabled' : ''} title="${esc(t('launch'))}">${icon('play')}</button>
-    </div>`;
+    </button>`;
   $$('.nav-btn', $('#rail')).forEach((b) => (b.onclick = () => go(b.dataset.view)));
   $('#launch').onclick = async () => {
     try { await invoke('launch_sim'); toast(t('launching')); setTimeout(pollStatus, 8000); } catch (e) { toast(errMsg(e), 'bad'); }
@@ -328,62 +328,99 @@ function viewDashboard(v) {
   const inst = sc.installation;
   const pk = sc.packages;
   const on = pk.filter((p) => p.enabled);
-  const sizeOn = on.reduce((a, p) => a + p.size, 0);
-  const sizeAll = pk.reduce((a, p) => a + p.size, 0);
+  const sum = (l) => l.reduce((a, p) => a + p.size, 0);
+  const sizeOn = sum(on);
+  const sizeAll = sum(pk);
   topbar(t('nav_dashboard'), inst ? `${esc(inst.label)} · <span class="mono">${esc(sc.target)}</span>` : esc(t('noSim')),
-    `<button class="btn" id="d-install">${icon('download')}${esc(t('install'))}</button><button class="btn icon" id="d-refresh" title="${esc(t('refreshHint'))}">${icon('refresh')}</button>`);
+    `<button class="btn primary" id="d-plan">${icon('target')}${esc(t('prepareFlight'))}</button>
+     <button class="btn" id="d-light">${icon('bolt')}${esc(t('lightMode'))}</button>
+     <button class="btn" id="d-save">${icon('save')}${esc(t('saveAsProfile'))}</button>
+     <button class="btn" id="d-install">${icon('download')}${esc(t('install'))}</button>
+     <button class="btn icon" id="d-refresh" title="${esc(t('refreshHint'))}">${icon('refresh')}</button>`);
   if (sc.error) {
     v.innerHTML = `<div class="empty">${icon('warn')}<h3>${esc(t('setupNeeded'))}</h3><div>${esc(sc.error)}</div><button class="btn primary" id="go-set">${icon('settings')}${esc(t('openSettings'))}</button></div>`;
     $('#go-set').onclick = () => go('settings');
     $('#d-refresh').onclick = (e) => refresh(e.shiftKey);
     $('#d-install').onclick = () => installDialog();
+    ['#d-plan', '#d-light', '#d-save'].forEach((id) => ($(id).disabled = true));
     return;
   }
-  const byCat = CATS.map((c) => ({ ...c, all: pk.filter((p) => catOf(p) === c.id), on: on.filter((p) => catOf(p) === c.id) }));
+  const byCat = CATS.map((c) => ({ ...c, all: pk.filter((p) => catOf(p) === c.id), on: on.filter((p) => catOf(p) === c.id) })).filter((c) => c.all.length);
   const issues = S.issues || [];
+  const errs = issues.filter((i) => i.severity === 'error').length;
+  const warns = issues.filter((i) => i.severity === 'warn').length;
   const active = S.profiles.find((p) => profileMatch(p) === 1);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const bar = (a, b, color = 'var(--acc)') => `<div class="mbar"><span style="width:${b ? (a / b) * 100 : 0}%;background:${color}"></span></div>`;
+
+  // Lotniska: każdy kod ICAO osobno, kraje wg pakietów.
+  const apts = pk.filter((p) => catOf(p) === 'airport');
+  const icaos = new Set(apts.flatMap((p) => p.airports.map((a) => a.icao)));
+  const countries = byCountry(apts).filter((g) => g.cc);
+  const planes = pk.filter((p) => catOf(p) === 'aircraft');
+  const liveries = pk.filter((p) => catOf(p) === 'livery');
+  const orphanLiv = liveries.filter((l) => !relatedOf(l).length).length;
+
+  // Źródła: biblioteki + Community, wyłączone i zewnętrzne.
+  const srcRows = [
+    ...sc.libraries.map((l) => ({ name: l.name, path: l.path, n: l.count, on: l.enabled, size: l.size, missing: !l.exists, ic: 'library', f: `lib:${l.id}` })),
+    ...['community', 'parking', 'external'].map((s) => { const l = pk.filter((p) => p.source === s); return { name: t('src_' + s), path: s === 'community' ? sc.target : s === 'parking' ? sc.parking : '', n: l.length, on: l.filter((p) => p.enabled).length, size: sum(l), ic: s === 'community' ? 'folder' : s === 'parking' ? 'eyeoff' : 'link', f: s }; }).filter((r) => r.n),
+  ];
+  const creators = Object.values(pk.reduce((m, p) => { const k = (p.creator || '').trim(); if (k) { (m[k] ||= { name: k, n: 0, on: 0, size: 0 }); m[k].n++; m[k].on += p.enabled; m[k].size += p.size; } return m; }, {})).sort((a, b) => b.n - a.n || b.size - a.size);
+  const biggest = [...pk].sort((a, b) => b.size - a.size).slice(0, 8);
+  const maxBig = biggest[0]?.size || 1;
+  const recent = [...pk].sort((a, b) => b.modified - a.modified).slice(0, 12);
+  const favs = pk.filter((p) => p.meta.favorite);
+  const locked = pk.filter((p) => p.meta.locked).length;
+  const noLayout = pk.filter((p) => p.hasManifest && !p.hasLayout).length;
+
+  const kpi = (ic, label, val, sub, extra = '', go = '') => `<div class="kpi ${go ? 'click' : ''}" ${go}>
+    <div class="k-top">${icon(ic)}<span>${esc(label)}</span></div><div class="k-val">${val}</div><div class="k-sub">${sub}</div>${extra}</div>`;
+  const panel = (ic, title, body, action = '', cls = '') => `<div class="dpanel ${cls}"><div class="dp-h">${icon(ic)}<b>${esc(title)}</b><span class="grow"></span>${action}</div>${body}</div>`;
+  const more = (id) => `<button class="btn sm ghost" id="${id}">${esc(t('details'))}${icon('chevron')}</button>`;
+
   v.innerHTML = `
     ${S.status.running ? `<div class="banner warn">${icon('warn')}<div class="grow">${esc(t('simRunningBanner'))}</div></div>` : ''}
     ${sc.suggestedLibraries.length ? `<div class="banner acc">${icon('library')}<div class="grow">${esc(t('suggestedLibBanner', sc.suggestedLibraries.length))}</div><button class="btn sm primary" id="d-sugg">${esc(t('review'))}</button></div>` : ''}
-    <div class="dash-hero">
-      <div class="hero-card">
-        <div class="muted" style="font-weight:600">${esc(t('activeAddons'))}</div>
-        <div class="big">${nf().format(on.length)}<small> / ${nf().format(pk.length)}</small></div>
-        <div class="muted">${esc(t('loadedSize', fmtSize(sizeOn), fmtSize(sizeAll)))}${active ? ` · ${esc(t('profile'))}: <b style="color:var(--text)">${esc(active.name)}</b>` : ''}</div>
-        <div class="meter">${byCat.filter((c) => c.on.length).map((c) => `<span style="width:${(c.on.length / Math.max(on.length, 1)) * 100}%;background:${c.color}" title="${esc(t('cat_' + c.id))}: ${c.on.length}"></span>`).join('')}</div>
-        <div class="legend">${byCat.filter((c) => c.on.length).map((c) => `<span><i style="background:${c.color}"></i>${esc(t('cat_' + c.id))} ${c.on.length}</span>`).join('')}</div>
-        <div class="hero-actions">
-          <button class="btn primary" id="d-plan">${icon('target')}${esc(t('prepareFlight'))}</button>
-          <button class="btn" id="d-light">${icon('bolt')}${esc(t('lightMode'))}</button>
-          <button class="btn" id="d-save">${icon('save')}${esc(t('saveAsProfile'))}</button>
-        </div>
-      </div>
-      <div class="card" style="padding:6px 0">
-        <div class="section-title" style="margin:10px 16px 6px">${icon('profiles')}${esc(t('quickProfiles'))}<span class="grow"></span><button class="btn sm ghost" id="d-prof">${esc(t('all'))}</button></div>
-        <div class="list">${S.profiles.length ? S.profiles.slice(0, 5).map((p) => `<div class="row click" data-prof="${p.id}">
-          <span style="width:10px;height:10px;border-radius:50%;background:${p.color || PROFILE_COLORS[0]}"></span>
+    <div class="kpis">
+      ${kpi('power', t('activeAddons'), `${nf().format(on.length)}<small> / ${nf().format(pk.length)}</small>`, `${pct(on.length, pk.length)}% · ${active ? `${esc(t('profile'))}: <b>${esc(active.name)}</b>` : esc(t('dNoProfile'))}`,
+        `<div class="meter">${byCat.filter((c) => c.on.length).map((c) => `<span style="width:${(c.on.length / Math.max(on.length, 1)) * 100}%;background:${c.color}" title="${esc(t('cat_' + c.id))}: ${c.on.length}"></span>`).join('')}</div>`)}
+      ${kpi('drive', t('dLoaded'), fmtSize(sizeOn), esc(t('dOfTotal', fmtSize(sizeAll), pct(sizeOn, sizeAll))), bar(sizeOn, sizeAll))}
+      ${kpi('airport', t('cat_airport'), `${nf().format(icaos.size)}<small> ICAO</small>`, esc(t('dAirportsSub', apts.length, countries.length)), '', `data-gocat="airport"`)}
+      ${kpi('aircraft', t('cat_aircraft'), `${nf().format(planes.length)}`, esc(t('dPlanesSub', liveries.length, orphanLiv)), '', `data-gocat="aircraft"`)}
+      ${kpi('library', t('dSources'), `${sc.libraries.length}`, esc(t('dSourcesSub', sc.communities.length, sc.broken.length)), '', `data-go="settings"`)}
+      ${kpi(errs ? 'error' : warns ? 'warn' : 'ok', t('nav_health'), S.issues === null ? '…' : errs + warns ? `${errs}<small> / ${warns}</small>` : '0', esc(S.issues === null ? t('checking') : errs + warns ? t('dIssuesSub', errs, warns) : t('allGood')), '', `data-go="health"`)}
+    </div>
+
+    <div class="dgrid">
+      ${panel('layers', t('categories'), `<div class="ctable">${byCat.map((c) => `<div class="crow click" data-gocat="${c.id}">
+          <span class="cdot" style="background:${c.color}"></span><span class="cname">${esc(t('cat_' + c.id))}</span>
+          <span class="mono cnum">${c.on.length}/${c.all.length}</span>${bar(c.on.length, c.all.length, c.color)}<span class="mono faint csize">${fmtSize(sum(c.all))}</span></div>`).join('')}</div>`)}
+      ${panel('library', t('dSources'), `<div class="ctable">${srcRows.map((r) => `<div class="crow click" data-gosrc="${esc(r.f)}" title="${esc(r.path)}">
+          ${icon(r.ic)}<span class="cname">${esc(r.name)}${r.missing ? ` <span class="tag bad">${esc(t('dMissing'))}</span>` : ''}</span>
+          <span class="mono cnum">${r.on}/${r.n}</span>${bar(r.on, r.n)}<span class="mono faint csize">${fmtSize(r.size)}</span></div>`).join('') || `<div class="d faint">—</div>`}</div>`, more('d-libs'))}
+      ${panel('profiles', t('quickProfiles'), `<div class="list">${S.profiles.length ? S.profiles.slice(0, 6).map((p) => `<div class="row click" data-prof="${p.id}">
+          <span class="cdot" style="background:${p.color || PROFILE_COLORS[0]}"></span>
           <div class="grow"><div class="t">${esc(p.name)}</div><div class="d">${p.packages.length} ${esc(plural(p.packages.length, t('pkg1'), t('pkg2'), t('pkg5')))}</div></div>
-          ${profileMatch(p) === 1 ? `<span class="tag ok">${icon('check')}${esc(t('active'))}</span>` : `<button class="btn sm" data-apply="${p.id}">${esc(t('apply'))}</button>`}</div>`).join('') : `<div class="row"><div class="grow d" style="white-space:normal">${esc(t('noProfilesHint'))}</div></div>`}</div>
-      </div>
+          ${profileMatch(p) === 1 ? `<span class="tag ok">${icon('check')}${esc(t('active'))}</span>` : `<button class="btn sm" data-apply="${p.id}">${esc(t('apply'))}</button>`}</div>`).join('') : `<div class="row"><div class="grow d" style="white-space:normal">${esc(t('noProfilesHint'))}</div></div>`}</div>`, more('d-prof'))}
+
+      ${panel('globe', t('dCountries'), `<div class="ctable">${countries.sort((a, b) => b.items.length - a.items.length).slice(0, 9).map((g) => { const n = g.items.filter((p) => p.enabled).length; return `<div class="crow click" data-gocountry="${esc(g.cc)}">
+          ${flag(g.cc)}<span class="cname">${esc(g.name)}</span><span class="mono cnum">${n}/${g.items.length}</span>${bar(n, g.items.length, catColor('airport'))}</div>`; }).join('') || `<div class="d faint">—</div>`}</div>`, countries.length > 9 ? `<span class="faint mono">+${countries.length - 9}</span>` : '')}
+      ${panel('tag', t('dCreators'), `<div class="ctable">${creators.slice(0, 9).map((c) => `<div class="crow click" data-gocreator="${esc(c.name)}">
+          <span class="cname">${esc(c.name)}</span><span class="mono cnum">${c.on}/${c.n}</span>${bar(c.on, c.n)}<span class="mono faint csize">${fmtSize(c.size)}</span></div>`).join('') || `<div class="d faint">—</div>`}</div>`, `<span class="faint mono">${creators.length}</span>`)}
+      ${panel('zip', t('dBiggest'), `<div class="ctable">${biggest.map((p) => `<div class="crow click" data-id="${p.id}">
+          <span class="cdot" style="background:${p.enabled ? catColor(catOf(p)) : 'var(--s4)'}"></span><span class="cname">${esc(p.title)}</span>${bar(p.size, maxBig, p.enabled ? catColor(catOf(p)) : 'var(--text-3)')}<span class="mono faint csize">${fmtSize(p.size)}</span></div>`).join('')}</div>`)}
+
+      ${panel('health', t('nav_health'), `<div class="list">${S.issues === null ? `<div class="row"><div class="grow d">${esc(t('checking'))}</div></div>` : issues.length ? issues.slice(0, 6).map((i) => `<div class="row click" data-go="health"><span class="sev ${i.severity}">${icon(i.severity === 'error' ? 'error' : i.severity === 'warn' ? 'warn' : 'info')}</span><div class="grow"><div class="t">${esc(i.title)}</div></div></div>`).join('') : `<div class="row"><span class="sev ok">${icon('ok')}</span><div class="grow t">${esc(t('allGood'))}</div></div>`}</div>
+        <div class="facts"><span>${icon('star')}${favs.length} ${esc(t('favorites').toLowerCase())}</span><span>${icon('lock')}${locked} ${esc(t('dLocked'))}</span><span>${icon('file')}${noLayout} ${esc(t('dNoLayout'))}</span><span>${icon('unlink')}${sc.broken.length} ${esc(t('dBroken'))}</span><span>${icon('folder')}${sc.strays.length} ${esc(t('dStrays'))}</span></div>`, more('d-health'))}
+      ${panel('drive', t('storage'), `<div class="list" id="disk-list"></div><div class="facts"><span>${icon('refresh')}${esc(t('dScanTook', (sc.tookMs / 1000).toFixed(1)))}</span></div>`)}
+      ${panel('history', t('dActivity'), `<div class="list" id="d-activity"><div class="row"><div class="grow d">${esc(t('checking'))}</div></div></div>`, more('d-hist'))}
     </div>
-    <div class="section-title">${icon('layers')}${esc(t('categories'))}</div>
-    <div class="stat-grid">${byCat.filter((c) => c.all.length).map((c) => `<div class="stat" data-cat="${c.id}">
-      <div class="top">${icon(c.id)}${esc(t('cat_' + c.id))}</div>
-      <div class="val">${c.on.length}<small> / ${c.all.length}</small></div>
-      <div class="foot">${fmtSize(c.all.reduce((a, p) => a + p.size, 0))}</div></div>`).join('')}</div>
-    <div class="dash-cols" style="margin-top:16px">
-      <div class="card">
-        <div class="section-title" style="margin:14px 16px 6px">${icon('health')}${esc(t('nav_health'))}<span class="grow"></span><button class="btn sm ghost" id="d-health">${esc(t('details'))}</button></div>
-        <div class="list">${S.issues === null ? `<div class="row"><div class="grow d">${esc(t('checking'))}</div></div>` : issues.length ? issues.slice(0, 5).map((i) => `<div class="row click" data-go="health">${icon(i.severity === 'error' ? 'error' : i.severity === 'warn' ? 'warn' : 'info')}<div class="grow"><div class="t">${esc(i.title)}</div></div></div>`).join('') : `<div class="row">${icon('ok')}<div class="grow t">${esc(t('allGood'))}</div></div>`}</div>
-      </div>
-      <div class="card">
-        <div class="section-title" style="margin:14px 16px 6px">${icon('drive')}${esc(t('storage'))}</div>
-        <div class="list" id="disk-list"></div>
-      </div>
-    </div>
+
     <div class="section-title">${icon('history')}${esc(t('recentlyAdded'))}</div>
-    <div class="grid">${[...pk].sort((a, b) => b.modified - a.modified).slice(0, 8).map(cardHtml).join('')}</div>`;
+    <div class="grid">${recent.map(cardHtml).join('')}</div>`;
   renderDiskList();
+  renderActivity();
   observeThumbs(v);
   bindCards(v);
   $('#d-refresh').onclick = (e) => refresh(e.shiftKey);
@@ -393,11 +430,38 @@ function viewDashboard(v) {
   $('#d-save').onclick = () => saveCurrentAsProfile();
   $('#d-prof').onclick = () => go('profiles');
   $('#d-health').onclick = () => go('health');
+  $('#d-hist').onclick = () => go('history');
+  $('#d-libs').onclick = () => go('settings');
   $('#d-sugg') && ($('#d-sugg').onclick = () => onboarding(true));
+  const toAddons = (patch) => { Object.assign(S.f, { cat: 'all', source: 'all', state: 'all', q: '', fav: false }, patch); go('addons'); };
   $$('[data-go]', v).forEach((r) => (r.onclick = () => go(r.dataset.go)));
-  $$('[data-cat]', v).forEach((c) => (c.onclick = () => { S.f.cat = c.dataset.cat; go('addons'); }));
+  $$('[data-gocat]', v).forEach((c) => (c.onclick = () => toAddons({ cat: c.dataset.gocat })));
+  $$('[data-gosrc]', v).forEach((c) => (c.onclick = () => toAddons({ source: c.dataset.gosrc })));
+  $$('[data-gocreator]', v).forEach((c) => (c.onclick = () => toAddons({ q: c.dataset.gocreator })));
+  $$('[data-gocountry]', v).forEach((c) => (c.onclick = () => {
+    // Pokazujemy wszystkie lotniska pogrupowane, zwinięte poza wybranym krajem.
+    S.settings.groupCountry = true;
+    S.collapsed = new Set(countries.map((g) => g.cc).filter((x) => x !== c.dataset.gocountry).concat(''));
+    toAddons({ cat: 'airport' });
+    $(`[data-grp="${c.dataset.gocountry}"]`)?.scrollIntoView({ block: 'start' });
+  }));
   $$('[data-apply]', v).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); applyProfile(b.dataset.apply); }));
   $$('[data-prof]', v).forEach((r) => (r.onclick = () => go('profiles')));
+}
+async function renderActivity() {
+  try { S.history ||= await invoke('history'); } catch { S.history = []; }
+  const el = $('#d-activity');
+  if (!el) return;
+  const batches = [];
+  for (const e of S.history) {
+    const b = batches[batches.length - 1];
+    if (b && b.batch === e.batch) { b.n++; if (!e.undone) b.undone = false; } else batches.push({ batch: e.batch, label: e.label, at: e.at, n: 1, undone: e.undone });
+  }
+  el.innerHTML = batches.length ? batches.slice(0, 6).map((b) => `<div class="row click" data-go="history">
+    <span class="sev ${b.undone ? '' : 'acc'}">${icon(b.undone ? 'undo' : 'history')}</span>
+    <div class="grow"><div class="t">${esc(b.label)}</div><div class="d">${esc(fmtTime(b.at))} · ${b.n} ${esc(plural(b.n, t('op1'), t('op2'), t('op5')))}</div></div></div>`).join('')
+    : `<div class="row"><div class="grow d">${esc(t('noHistory'))}</div></div>`;
+  $$('[data-go]', el).forEach((r) => (r.onclick = () => go('history')));
 }
 function renderDiskList() {
   const el = $('#disk-list');
@@ -436,7 +500,7 @@ function filtered() {
       if (f.source.startsWith('lib:')) { if (p.libraryId !== f.source.slice(4)) return false; } else if (p.source !== f.source) return false;
     }
     if (q) {
-      const hay = `${p.title} ${p.folder} ${p.creator} ${p.manufacturer} ${p.group} ${p.meta.tags.join(' ')} ${p.meta.note} ${p.airports.map((a) => `${a.icao} ${a.name} ${a.city}`).join(' ')} ${p.aircraft.join(' ')}`.toLowerCase();
+      const hay = `${p.title} ${p.folder} ${p.creator} ${p.manufacturer} ${p.group} ${p.meta.tags.join(' ')} ${p.meta.note} ${p.airports.map((a) => `${a.icao} ${a.name} ${a.city} ${a.country} ${countryName(a.country)}`).join(' ')} ${p.aircraft.join(' ')}`.toLowerCase();
       if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
     }
     return true;
@@ -454,9 +518,30 @@ function filtered() {
   return list;
 }
 
+// Flaga jako tło spanu – reguły dla <img> miniatur (pozycjonowanie, leniwe ładowanie) jej nie dotyczą.
+const flag = (cc) => /^[a-z]{2}$/i.test(cc || '') ? `<span class="flag" style="background-image:url(vendor/flags/${cc.toLowerCase()}.svg)"></span>` : '';
+const icaoTag = (a) => `<span class="tag icao ${a.source === 'bgl' ? 'acc' : ''}" title="${esc(countryName(a.country))}">${flag(a.country)}${esc(a.icao)}</span>`;
+let regionNames = null;
+function countryName(cc) {
+  if (!cc) return t('countryUnknown');
+  try { regionNames ||= new Intl.DisplayNames([lang()], { type: 'region' }); return regionNames.of(cc.toUpperCase()) || cc; } catch { return cc; }
+}
+// Kraj pakietu – najczęstszy wśród jego lotnisk.
+function countryOf(p) {
+  const n = {};
+  for (const a of p.airports) if (a.country) { const c = a.country.toUpperCase(); n[c] = (n[c] || 0) + 1; }
+  return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+function byCountry(list) {
+  const m = new Map();
+  for (const p of list) { const c = countryOf(p); if (!m.has(c)) m.set(c, []); m.get(c).push(p); }
+  return [...m.entries()].map(([cc, items]) => ({ cc, name: countryName(cc), items }))
+    .sort((a, b) => (!a.cc - !b.cc) || a.name.localeCompare(b.name, lang()));
+}
+
 function badgeIcao(p) {
   if (!p.airports.length) return '';
-  const first = p.airports.slice(0, 2).map((a) => `<span class="tag icao ${a.source === 'bgl' ? 'acc' : ''}">${esc(a.icao)}</span>`).join('');
+  const first = p.airports.slice(0, 2).map(icaoTag).join('');
   return first + (p.airports.length > 2 ? `<span class="tag">+${p.airports.length - 2}</span>` : '');
 }
 function sourceLabel(p) {
@@ -466,20 +551,25 @@ function sourceLabel(p) {
 function cardHtml(p) {
   const cat = catOf(p);
   const th = p.thumbs[0];
-  return `<div class="pkg ${p.enabled ? '' : 'off'} ${S.sel.has(p.id) ? 'sel' : ''}" data-id="${p.id}">
+  const lv = cat === 'aircraft' ? liveryCount(p) : 0;
+  const sub = cat === 'livery' && relatedOf(p)[0] ? `↳ ${esc(relatedOf(p)[0].title)}` : esc(p.creator || p.folder);
+  return `<div class="pkg ${p.enabled ? '' : 'off'} ${S.sel.has(p.id) ? 'sel' : ''}" data-id="${p.id}" style="--cat:${catColor(cat)}">
     <div class="thumb">
       <div class="ph">${icon(cat)}</div>
       ${th ? `<img data-src="${esc(th)}" alt="" loading="lazy">` : ''}
       <div class="over"></div>
       <div class="check">${icon('check')}</div>
-      <div class="tl">${badgeIcao(p)}${cat === 'aircraft' && liveryCount(p) ? `<span class="tag" title="${esc(t('liveriesFor'))}">${icon('livery')}${liveryCount(p)}</span>` : ''}${p.meta.locked ? `<span class="tag">${icon('lock')}</span>` : ''}</div>
+      <div class="tl">${badgeIcao(p)}${lv ? `<span class="tag" title="${esc(t('liveriesFor'))}">${icon('livery')}${lv}</span>` : ''}${p.meta.locked ? `<span class="tag" title="${esc(t('locked'))}">${icon('lock')}</span>` : ''}</div>
       <div class="tr"><button class="switch ${p.enabled ? 'on' : ''} ${S.busy.has(p.id) ? 'busy' : ''}" data-sw="${p.id}" title="${esc(p.enabled ? t('disable') : t('enable'))}"></button></div>
-      <div class="bl">${icon(p.link ? 'link' : p.source === 'community' ? 'folder' : cat)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sourceLabel(p))}</span></div>
+      <div class="cap">
+        <div class="t" title="${esc(p.title)}">${p.meta.favorite ? `<span class="star">★</span>` : ''}${esc(p.title)}</div>
+        <div class="d">${sub}</div>
+      </div>
     </div>
     <div class="body">
-      <div class="t" title="${esc(p.title)}">${p.meta.favorite ? `<span class="star">★</span> ` : ''}${esc(p.title)}</div>
-      <div class="d">${cat === 'livery' && relatedOf(p)[0] ? `↳ ${esc(relatedOf(p)[0].title)}` : esc(p.creator || p.folder)}</div>
-      <div class="m"><span style="color:${catColor(cat)}">●</span><span>${esc(t('cat_' + cat))}</span><span class="grow"></span>${p.version ? `<span>v${esc(p.version)}</span>` : ''}<span>${fmtSize(p.size)}</span></div>
+      <span class="catpill">${icon(cat)}${esc(t('cat_' + cat))}</span>
+      <span class="src" title="${esc(sourceLabel(p))}">${icon(p.link ? 'link' : p.source === 'community' ? 'folder' : p.source === 'parking' ? 'eyeoff' : 'library')}<span>${esc(sourceLabel(p))}</span></span>
+      <span class="meta">${p.version ? `v${esc(p.version)} · ` : ''}${fmtSize(p.size)}</span>
     </div></div>`;
 }
 function rowHtml(p) {
@@ -501,6 +591,7 @@ function viewAddons(v) {
   const f = S.f;
   const list = filtered();
   const on = list.filter((p) => p.enabled).length;
+  const grouped = S.settings.groupCountry && f.cat === 'airport';
   topbar(t('nav_addons'), esc(t('shownOf', list.length, sc.packages.length, on)),
     `<label class="search">${icon('search')}<input id="q" placeholder="${esc(t('searchPh'))}" value="${esc(f.q)}"><kbd>Ctrl F</kbd></label>
      <button class="btn" id="a-install">${icon('download')}${esc(t('install'))}</button>
@@ -513,10 +604,11 @@ function viewAddons(v) {
       <div class="chips cats">${['all', ...CATS.map((c) => c.id)].filter((c) => c === 'all' || countCat(c)).map((c) => `<button class="chip ${f.cat === c ? 'on' : ''}" data-fcat="${c}">${icon(c === 'all' ? 'all' : c)}${esc(c === 'all' ? t('all') : t('cat_' + c))}<span class="n">${countCat(c)}</span></button>`).join('')}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <div class="seg">${[['all', t('all')], ['on', t('enabled')], ['off', t('disabled')]].map(([k, l]) => `<button data-fstate="${k}" class="${f.state === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
-        <select class="inp" id="fsource" style="height:34px;border-radius:999px">${sources.map(([id, l]) => `<option value="${esc(id)}" ${f.source === id ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        <select class="inp" id="fsource" style="height:30px;border-radius:999px">${sources.map(([id, l]) => `<option value="${esc(id)}" ${f.source === id ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
         <button class="chip ${f.fav ? 'on' : ''}" id="ffav">${icon('star')}${esc(t('favorites'))}</button>
+        ${f.cat === 'airport' ? `<button class="chip ${grouped ? 'on' : ''}" id="fgroup">${icon('globe')}${esc(t('groupByCountry'))}</button>` : ''}
         <span class="grow" style="flex:1"></span>
-        <select class="inp" id="fsort" style="height:34px;border-radius:999px">${['title', 'creator', 'size', 'date', 'state', 'category'].map((k) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${esc(t('sort_' + k))}</option>`).join('')}</select>
+        <select class="inp" id="fsort" style="height:30px;border-radius:999px">${['title', 'creator', 'size', 'date', 'state', 'category'].map((k) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${esc(t('sort_' + k))}</option>`).join('')}</select>
         <button class="btn sm icon" id="fdir" title="${esc(t('reverse'))}">${icon('sort')}</button>
         <div class="seg"><button data-vw="grid" class="${S.settings.view !== 'list' ? 'on' : ''}" title="${esc(t('gridView'))}">${icon('grid')}</button><button data-vw="list" class="${S.settings.view === 'list' ? 'on' : ''}" title="${esc(t('listView'))}">${icon('list')}</button></div>
         <button class="btn sm ${S.selecting ? 'primary' : ''}" id="fselect">${icon('select')}${esc(t('select'))}</button>
@@ -526,6 +618,25 @@ function viewAddons(v) {
   const box = $('#pkglist');
   if (!list.length) {
     box.innerHTML = `<div class="empty">${icon('addons')}<h3>${esc(sc.packages.length ? t('noMatches') : t('noAddons'))}</h3><div>${esc(sc.packages.length ? t('noMatchesHint') : t('noAddonsHint'))}</div></div>`;
+  } else if (grouped) {
+    const groups = byCountry(list);
+    list.splice(0, list.length, ...groups.flatMap((g) => g.items));
+    const head = (g) => {
+      const n = g.items.filter((p) => p.enabled).length;
+      const all = n === g.items.length;
+      return `<div class="grp-h ${S.collapsed.has(g.cc) ? 'shut' : ''}" data-grp="${esc(g.cc)}">${icon('chevron')}${flag(g.cc) || icon('globe')}<b>${esc(g.name)}</b><span class="n">${n}/${g.items.length}</span><span class="grow"></span><button class="switch ${all ? 'on' : ''}" data-grpsw="${esc(g.cc)}" title="${esc(all ? t('disableAll') : t('enableAll'))}"></button></div>`;
+    };
+    const body = (g) => S.settings.view === 'list'
+      ? `<table class="table"><tbody>${g.items.map(rowHtml).join('')}</tbody></table>`
+      : `<div class="grid">${g.items.map(cardHtml).join('')}</div>`;
+    box.innerHTML = groups.map((g) => `<section class="grp">${head(g)}${S.collapsed.has(g.cc) ? '' : body(g)}</section>`).join('');
+    $$('[data-grp]', box).forEach((h) => (h.onclick = () => { const c = h.dataset.grp; if (S.collapsed.has(c)) S.collapsed.delete(c); else S.collapsed.add(c); renderView(); }));
+    $$('[data-grpsw]', box).forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      const g = groups.find((x) => x.cc === b.dataset.grpsw);
+      const all = g.items.every((p) => p.enabled);
+      toggle(g.items.map((p) => p.id), !all, `${g.name}: ${all ? t('lblBulkDisable') : t('lblBulkEnable')}`);
+    }));
   } else if (S.settings.view === 'list') {
     box.innerHTML = `<table class="table"><thead><tr><th></th><th></th><th data-sort="title">${esc(t('colName'))}</th><th data-sort="category">${esc(t('colCat'))}</th><th data-sort="creator">${esc(t('colCreator'))}</th><th>ICAO</th><th>${esc(t('colSource'))}</th><th class="num">${esc(t('colVer'))}</th><th class="num" data-sort="size">${esc(t('colSize'))}</th></tr></thead><tbody>${list.map(rowHtml).join('')}</tbody></table>`;
     $$('th[data-sort]', box).forEach((th) => (th.onclick = () => { if (f.sort === th.dataset.sort) f.dir *= -1; else { f.sort = th.dataset.sort; f.dir = 1; } renderView(); }));
@@ -544,6 +655,7 @@ function viewAddons(v) {
   $('#fsort').onchange = (e) => { f.sort = e.target.value; f.dir = 1; S.settings.sort = f.sort; persist(); renderView(); };
   $('#fdir').onclick = () => { f.dir *= -1; renderView(); };
   $('#ffav').onclick = () => { f.fav = !f.fav; renderView(); };
+  if ($('#fgroup')) $('#fgroup').onclick = () => { S.settings.groupCountry = !grouped; persist(); renderView(); };
   $$('[data-vw]', v).forEach((b) => (b.onclick = () => { S.settings.view = b.dataset.vw; persist(); renderView(); }));
   $('#fselect').onclick = () => { S.selecting = !S.selecting; if (!S.selecting) S.sel.clear(); renderView(); };
   renderBulk(list);
@@ -706,7 +818,7 @@ async function openSheet(id, keep = false) {
       ${variants.length ? `<div class="panel"><h4>${icon('aircraft')}${esc(t('variants'))} <span class="n">${variants.length}</span></h4>
         <div class="vchips">${shownVariants.map((a) => `<span>${esc(a)}</span>`).join('')}${variants.length > shownVariants.length ? `<button id="s-more">${esc(t('showAll', variants.length))}</button>` : ''}</div></div>` : ''}
       ${p.airports.length ? `<div class="panel"><h4>${icon('airport')}${esc(t('airports'))} <span class="n">${p.airports.length}</span></h4><div class="mini-map" id="mini-map"></div>
-        <div class="apt-list">${p.airports.slice(0, 120).map((a, i) => `<div class="apt" data-apt="${i}"><span class="tag icao ${a.source === 'bgl' ? 'acc' : ''}">${esc(a.icao)}</span><span class="grow">${esc(a.name || '—')}${a.city ? ` <span class="faint">· ${esc(a.city)}</span>` : ''}</span><span class="faint mono">${esc(a.country)}</span></div>`).join('')}</div>
+        <div class="apt-list">${p.airports.slice(0, 120).map((a, i) => `<div class="apt" data-apt="${i}">${icaoTag(a)}<span class="grow">${esc(a.name || '—')}${a.city ? ` <span class="faint">· ${esc(a.city)}</span>` : ''}</span><span class="faint mono">${esc(a.country)}</span></div>`).join('')}</div>
         ${p.airports.some((a) => a.source === 'name') ? `<div class="faint" style="font-size:12px;padding:0 14px 12px">${esc(t('guessedAirports'))}</div>` : ''}</div>` : ''}
       ${p.dependencies.length ? `<div class="panel"><h4>${icon('merge')}${esc(t('dependencies'))} <span class="n">${p.dependencies.length}</span></h4><div class="apt-list">${p.dependencies.map((d) => { const dep = S.scan.packages.find((x) => x.key === d.name.toLowerCase()); return `<div class="apt" ${dep ? `data-open="${dep.id}"` : ''}><span class="grow mono">${esc(d.name)}</span>${dep ? `<span class="tag ${dep.enabled ? 'ok' : 'warn'}">${esc(dep.enabled ? t('enabled') : t('disabled'))}</span>` : `<span class="tag">${esc(t('notInstalled'))}</span>`}</div>`; }).join('')}</div></div>` : ''}
       <div id="dependents"></div>
@@ -889,16 +1001,7 @@ function airportPoints() {
 function mapTopbar() {
   const pts = airportPoints();
   const pkgs = new Set(pts.map((x) => x.pkg.id));
-  topbar(t('nav_map'), esc(t('mapSub', pts.length, pkgs.size)),
-    `<div class="seg">${[['dark', t('mapDark')], ['light', t('mapLight')], ['osm', 'OSM'], ['satellite', t('mapSat')]].map(([k, l]) => `<button data-ms="${k}" class="${(S.settings.mapStyle || 'dark') === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`);
-  // Zmiana podkładu podmienia tylko kafelki – widok zostaje tam, gdzie był.
-  $$('[data-ms]').forEach((b) => (b.onclick = () => {
-    S.settings.mapStyle = b.dataset.ms;
-    persist();
-    if (S.mapTiles) S.mapTiles.remove();
-    S.mapTiles = tileLayer(S.settings.mapStyle).addTo(S.map);
-    $$('[data-ms]').forEach((x) => x.classList.toggle('on', x === b));
-  }));
+  topbar(t('nav_map'), esc(t('mapSub', pts.length, pkgs.size)));
 }
 function viewMap(v) {
   // Mapa już stoi – po przełączeniu dodatku odświeżamy tylko znaczniki i panel.
@@ -1578,6 +1681,7 @@ function viewSettings(v) {
     </div>
     <div class="card set-card"><h3>${icon('eye')}${esc(t('setLook'))}</h3>
       ${row(esc(t('theme')), '', `<select class="inp" id="st-theme" style="width:200px">${['dark', 'amoled', 'light', 'auto'].map((k) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${esc(t('theme_' + k))}</option>`).join('')}</select>`)}
+      ${row(esc(t('mapStyle')), '', `<select class="inp" id="st-map" style="width:200px">${[['dark', t('mapDark')], ['light', t('mapLight')], ['osm', 'OpenStreetMap'], ['satellite', t('mapSat')]].map(([k, l]) => `<option value="${k}" ${(s.mapStyle || 'dark') === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`)}
       ${row(esc(t('accent')), '', `<div class="accent-pick">${['sky', 'amber', 'green', 'violet', 'rose'].map((a) => `<button data-acc="${a}" class="${s.accent === a ? 'on' : ''}" style="background:${{ sky: '#5cc4ff', amber: '#ffc35a', green: '#5fe0a0', violet: '#b7a2ff', rose: '#ff95b5' }[a]}"></button>`).join('')}</div>`)}
       ${row(esc(t('language')), '', `<select class="inp" id="st-lang" style="width:200px"><option value="pl" ${s.language === 'pl' ? 'selected' : ''}>Polski</option><option value="en" ${s.language === 'en' ? 'selected' : ''}>English</option></select>`)}
       ${row(esc(t('cardSize')), '', `<input type="range" id="st-card" min="190" max="360" step="10" value="${s.cardSize || 240}">`)}
@@ -1614,6 +1718,7 @@ function viewSettings(v) {
   }));
   $('#st-lm').onchange = (e) => { s.linkMode = e.target.value; persist(); };
   $('#st-lp').onchange = (e) => { s.liveryPrompt = e.target.value; persist(); };
+  $('#st-map').onchange = (e) => { s.mapStyle = e.target.value; persist(); };
   $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));
   $('#st-lang').onchange = (e) => { s.language = e.target.value; setLang(s.language); persist(); renderRail(); renderView(); };

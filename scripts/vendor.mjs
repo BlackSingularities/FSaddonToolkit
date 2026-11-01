@@ -12,6 +12,9 @@ const copy = (from, to) => fs.copyFileSync(path.join(nm, from), path.join(vendor
 copy('leaflet/dist/leaflet.js', 'leaflet.js')
 copy('leaflet/dist/leaflet.css', 'leaflet.css')
 for (const f of fs.readdirSync(path.join(nm, 'leaflet/dist/images'))) copy(`leaflet/dist/images/${f}`, `images/${f}`)
+// Flagi krajów (flag-icons, MIT) – emoji flag nie wyświetlają się w Windows.
+fs.mkdirSync(path.join(vendor, 'flags'), { recursive: true })
+for (const f of fs.readdirSync(path.join(nm, 'flag-icons/flags/4x3'))) copy(`flag-icons/flags/4x3/${f}`, `flags/${f}`)
 
 const icons = {
   dashboard: 'layout-dashboard', addons: 'package', map: 'map', profiles: 'layers', official: 'badge-check',
