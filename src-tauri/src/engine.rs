@@ -653,4 +653,13 @@ mod real {
         }
         println!("sugerowane biblioteki: {:?}", s.suggested_libraries.iter().map(|x| (&x.path, x.links)).collect::<Vec<_>>());
     }
+
+    #[test]
+    fn cache_survives_new_fields() {
+        // Pamięć z poprzedniej wersji (bez nowszych pól) ma się wczytać, a nie wymusić pełny skan.
+        let old = r#"{"version":4,"entries":{"pkg":[1,{"title":"A","airports":[{"icao":"EPWA"}]}]}}"#;
+        let c: Cache = serde_json::from_str(old).unwrap();
+        assert_eq!(c.entries["pkg"].1.title, "A");
+        assert_eq!(c.entries["pkg"].1.airports[0].icao, "EPWA");
+    }
 }

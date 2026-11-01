@@ -1,5 +1,11 @@
 # Zmiany
 
+## 1.2.1
+
+- Start bez ponownego czytania całej bazy: pamięć podręczna skanu wczytuje się także po aktualizacji aplikacji (nowe pola nie unieważniają jej w całości), więc czytane są tylko nowe i zmienione dodatki.
+- Raport problemów korzysta z właśnie zrobionego skanu zamiast skanować drugi raz.
+- Odświeżanie (przycisk, F5) sprawdza tylko zmienione dodatki; pełny skan od nowa – Shift+F5 lub Shift+klik.
+
 ## 1.2.0
 
 - Zakres profilu: profil może zarządzać tylko wybranymi kategoriami (np. same lotniska) – samolotów i reszty wtedy nie rusza.

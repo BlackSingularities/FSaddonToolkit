@@ -331,11 +331,11 @@ function viewDashboard(v) {
   const sizeOn = on.reduce((a, p) => a + p.size, 0);
   const sizeAll = pk.reduce((a, p) => a + p.size, 0);
   topbar(t('nav_dashboard'), inst ? `${esc(inst.label)} · <span class="mono">${esc(sc.target)}</span>` : esc(t('noSim')),
-    `<button class="btn" id="d-install">${icon('download')}${esc(t('install'))}</button><button class="btn icon" id="d-refresh" title="${esc(t('refresh'))} (F5)">${icon('refresh')}</button>`);
+    `<button class="btn" id="d-install">${icon('download')}${esc(t('install'))}</button><button class="btn icon" id="d-refresh" title="${esc(t('refreshHint'))}">${icon('refresh')}</button>`);
   if (sc.error) {
     v.innerHTML = `<div class="empty">${icon('warn')}<h3>${esc(t('setupNeeded'))}</h3><div>${esc(sc.error)}</div><button class="btn primary" id="go-set">${icon('settings')}${esc(t('openSettings'))}</button></div>`;
     $('#go-set').onclick = () => go('settings');
-    $('#d-refresh').onclick = () => refresh(true);
+    $('#d-refresh').onclick = (e) => refresh(e.shiftKey);
     $('#d-install').onclick = () => installDialog();
     return;
   }
@@ -386,7 +386,7 @@ function viewDashboard(v) {
   renderDiskList();
   observeThumbs(v);
   bindCards(v);
-  $('#d-refresh').onclick = () => refresh(true);
+  $('#d-refresh').onclick = (e) => refresh(e.shiftKey);
   $('#d-install').onclick = () => installDialog();
   $('#d-plan').onclick = () => { go('map'); setTimeout(() => setMapTab('plan'), 50); };
   $('#d-light').onclick = lightMode;
@@ -504,7 +504,7 @@ function viewAddons(v) {
   topbar(t('nav_addons'), esc(t('shownOf', list.length, sc.packages.length, on)),
     `<label class="search">${icon('search')}<input id="q" placeholder="${esc(t('searchPh'))}" value="${esc(f.q)}"><kbd>Ctrl F</kbd></label>
      <button class="btn" id="a-install">${icon('download')}${esc(t('install'))}</button>
-     <button class="btn icon" id="a-refresh" title="${esc(t('refresh'))} (F5)">${icon('refresh')}</button>`);
+     <button class="btn icon" id="a-refresh" title="${esc(t('refreshHint'))}">${icon('refresh')}</button>`);
   const countCat = (c) => sc.packages.filter((p) => c === 'all' || catOf(p) === c).length;
   const sources = [['all', t('allSources')], ['community', t('src_community')], ...sc.libraries.map((l) => [`lib:${l.id}`, l.name]), ['parking', t('src_parking')], ['external', t('src_external')]]
     .filter(([id]) => id === 'all' || id.startsWith('lib:') || sc.packages.some((p) => p.source === id));
@@ -536,7 +536,7 @@ function viewAddons(v) {
   bindCards(box, list);
   const q = $('#q');
   q.oninput = debounce(() => { f.q = q.value; const pos = q.selectionStart; renderView(); const nq = $('#q'); nq.focus(); nq.setSelectionRange(pos, pos); }, 160);
-  $('#a-refresh').onclick = () => refresh(true);
+  $('#a-refresh').onclick = (e) => refresh(e.shiftKey);
   $('#a-install').onclick = () => installDialog();
   $$('[data-fcat]', v).forEach((b) => (b.onclick = () => { f.cat = b.dataset.fcat; renderView(); }));
   $$('[data-fstate]', v).forEach((b) => (b.onclick = () => { f.state = b.dataset.fstate; renderView(); }));
@@ -1692,7 +1692,8 @@ document.addEventListener('keydown', (e) => {
     else if (S.selecting) { S.selecting = false; S.sel.clear(); renderView(); }
     return;
   }
-  if (e.key === 'F5') { e.preventDefault(); refresh(true); return; }
+  // F5 sprawdza tylko zmienione pakiety, Shift+F5 czyta wszystko od nowa.
+  if (e.key === 'F5') { e.preventDefault(); refresh(e.shiftKey); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); if (S.view !== 'addons') go('addons'); setTimeout(() => $('#q')?.focus(), 30); return; }
   if (typing) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && S.view === 'addons') { e.preventDefault(); S.selecting = true; filtered().forEach((p) => S.sel.add(p.id)); renderView(); return; }

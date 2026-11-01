@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AirportRef {
     pub icao: String,
     pub name: String,
@@ -21,14 +21,14 @@ pub struct AirportRef {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Dependency {
     pub name: String,
     pub version: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct PackageInfo {
     pub has_manifest: bool,
     pub has_layout: bool,

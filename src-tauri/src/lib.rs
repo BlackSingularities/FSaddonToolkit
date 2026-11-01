@@ -629,7 +629,8 @@ fn official_names(state: &AppState) -> HashSet<String> {
 async fn health(app: AppHandle) -> Result<Vec<health::Issue>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let scan = state.rescan()?;
+        // Raport tuż po skanie – bierzemy ostatni wynik zamiast skanować drugi raz.
+        let scan = state.current()?;
         Ok(health::check(&scan, &official_names(&state)))
     })
     .await
