@@ -1783,6 +1783,7 @@ function setupDrop() {
   const drop = $('#drop');
   T.webview.getCurrentWebview().onDragDropEvent((e) => {
     const p = e.payload;
+    if (p.type === 'enter') { drop.querySelector('h3').textContent = t('dropTitle'); drop.querySelector('.muted').textContent = t('dropHint'); }
     if (p.type === 'enter' || p.type === 'over') drop.hidden = false;
     else if (p.type === 'leave') drop.hidden = true;
     else if (p.type === 'drop') { drop.hidden = true; if (p.paths?.length) installDialog(p.paths); }
