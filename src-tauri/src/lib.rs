@@ -797,7 +797,7 @@ fn version_tuple(v: &str) -> Vec<u64> {
     v.trim_start_matches('v').split(['.', '-']).filter_map(|x| x.parse().ok()).collect()
 }
 
-const UPDATE_FEED: &str = "https://redzikowski.com/api/github/repos/BlackSingularities/FSaddonToolkit/releases/latest";
+const UPDATE_FEED: &str = "https://redzikowski.com/api/releases/repos/BlackSingularities/FSaddonToolkit/releases/latest";
 const UPDATE_ASSETS: &str = "https://redzikowski.com/api/projects/fsaddontoolkit/asset/";
 
 #[tauri::command]
