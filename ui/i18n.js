@@ -111,7 +111,7 @@ const PL = {
   noSimD: 'Wskaż folder Community w ustawieniach.', foundInCommunity: 'Znalezione pakiety: {0}', foundLinks: 'W tym podpiętych łączami: {0}',
   noSuggestions: 'Dodaj bibliotekę w ustawieniach, gdy zechcesz trzymać dodatki poza Community.', skip: 'Pomiń', addSelected: 'Dodaj zaznaczone',
   librariesAddedN: 'Dodano biblioteki: {0}', upToDate: 'Masz najnowszą wersję ({0})', updateAvailable: 'Dostępna wersja {0}', later: 'Później',
-  changelog: 'Co nowego', installUpdate: 'Zainstaluj', downloading: 'Pobieranie aktualizacji…',
+  updateNewVersion: 'Dostępna jest nowa wersja aplikacji.', installUpdate: 'Zainstaluj', downloading: 'Pobieranie aktualizacji…',
   dropTitle: 'Upuść, aby zainstalować', dropHint: 'ZIP · RAR · 7z · foldery z dodatkami',
 };
 
@@ -226,7 +226,7 @@ const EN = {
   noSimD: 'Point to the Community folder in settings.', foundInCommunity: 'Packages found: {0}', foundLinks: 'Of which linked: {0}',
   noSuggestions: 'Add a library in settings when you want to keep add-ons outside Community.', skip: 'Skip', addSelected: 'Add selected',
   librariesAddedN: 'Libraries added: {0}', upToDate: 'You have the latest version ({0})', updateAvailable: 'Version {0} available', later: 'Later',
-  changelog: 'What’s new', installUpdate: 'Install', downloading: 'Downloading the update…',
+  updateNewVersion: 'A new version of the app is available.', installUpdate: 'Install', downloading: 'Downloading the update…',
   dropTitle: 'Drop to install', dropHint: 'ZIP · RAR · 7z · add-on folders',
 };
 

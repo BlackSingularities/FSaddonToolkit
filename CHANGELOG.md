@@ -1,5 +1,9 @@
 # Zmiany
 
+## 1.3.1
+
+- Komunikat o nowej wersji bez listy zmian, linków i informacji, skąd pobierana jest aktualizacja.
+
 ## 1.3.0
 
 - Nowy pulpit: kafelki z najważniejszymi liczbami (aktywne, ładowany rozmiar, lotniska i kraje, samoloty i malowania, źródła, problemy) oraz panele kategorii, bibliotek, profili, lotnisk wg krajów, twórców, największych dodatków, kondycji, dysków i ostatniej aktywności – wiersze prowadzą do przefiltrowanej listy.

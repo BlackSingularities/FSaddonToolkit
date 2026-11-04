@@ -1691,7 +1691,7 @@ function viewSettings(v) {
       ${row(esc(t('shortcuts')), esc(t('shortcutsD')), '')}
       ${row(esc(t('dataDir')), `<span class="mono selectable">${esc(S.info.dataDir)}</span>`, `<button class="btn sm icon" data-open-path="${esc(S.info.dataDir)}">${icon('folder')}</button>`)}
       ${row(esc(t('airportDb')), esc(t('airportDbD', nf().format(S.info.airports))), '')}
-      ${row(esc(t('author')), 'Adam Rędzikowski · <a href="#" id="st-site">redzikowski.com</a> · <a href="#" id="st-mail">kontakt@redzikowski.com</a> · <a href="#" id="st-gh">GitHub</a>', `<button class="btn sm" id="st-coffee">${icon('coffee')}${esc(t('coffee'))}</button>`)}
+      ${row(esc(t('author')), 'Adam Rędzikowski · <a href="#" id="st-site">redzikowski.com</a> · <a href="#" id="st-mail">kontakt@redzikowski.com</a>', `<button class="btn sm" id="st-coffee">${icon('coffee')}${esc(t('coffee'))}</button>`)}
     </div></div>`;
   $$('[data-swk]', v).forEach((b) => (b.onclick = () => { const k = b.dataset.swk; s[k] = !s[k]; b.classList.toggle('on', s[k]); persist(); }));
   $$('[data-open-path]', v).forEach((b) => (b.onclick = () => opener.openPath(b.dataset.openPath).catch((e) => toast(errMsg(e), 'bad'))));
@@ -1726,7 +1726,6 @@ function viewSettings(v) {
   $('#st-upd').onclick = () => checkUpdate(false);
   $('#st-site').onclick = (e) => { e.preventDefault(); opener.openUrl('https://redzikowski.com'); };
   $('#st-mail').onclick = (e) => { e.preventDefault(); opener.openUrl('mailto:kontakt@redzikowski.com'); };
-  $('#st-gh').onclick = (e) => { e.preventDefault(); opener.openUrl('https://github.com/BlackSingularities/FSaddonToolkit'); };
   $('#st-coffee').onclick = () => opener.openUrl('https://buycoffee.to/adamredzikowski');
 }
 function applyTheme() {
@@ -1770,10 +1769,9 @@ async function checkUpdate(silent) {
     if (!u.available) { if (!silent) toast(t('upToDate', S.info.version)); return; }
     const ok = await dialog({
       title: t('updateAvailable', u.latest),
-      body: `<div class="muted selectable" style="white-space:pre-wrap;max-height:300px;overflow:auto">${esc(u.notes || '')}</div>`,
-      actions: [{ label: t('later'), value: false }, { label: t('changelog'), value: 'web' }, ...(u.canInstall && u.download ? [{ label: t('installUpdate'), kind: 'primary', value: true }] : [])],
+      body: `<div class="muted">${esc(t('updateNewVersion'))}</div>`,
+      actions: [{ label: t('later'), value: false }, ...(u.canInstall && u.download ? [{ label: t('installUpdate'), kind: 'primary', value: true }] : [])],
     });
-    if (ok === 'web') opener.openUrl('https://redzikowski.com/portfolio/fsaddontoolkit');
     if (ok === true) { toast(t('downloading')); await invoke('install_update', { url: u.download }); }
   } catch (e) { if (!silent) toast(errMsg(e), 'bad'); }
 }
