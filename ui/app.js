@@ -1,12 +1,14 @@
 // FS Addon Toolkit – interfejs
 import { icon } from './icons.js';
 import { t, setLang, lang } from './i18n.js';
+import { initFeedback, openFeedback } from './feedback.js';
 
 const T = window.__TAURI__;
 const invoke = (cmd, args) => T.core.invoke(cmd, args);
 const fileSrc = (p) => T.core.convertFileSrc(p);
 const opener = T.opener;
 const dlg = T.dialog;
+initFeedback({ app: 'fsaddontoolkit', appName: 'FS Addon Toolkit', version: () => T.app.getVersion(), lang: () => lang(), platform: 'windows' });
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -1691,6 +1693,7 @@ function viewSettings(v) {
       ${row(esc(t('shortcuts')), esc(t('shortcutsD')), '')}
       ${row(esc(t('dataDir')), `<span class="mono selectable">${esc(S.info.dataDir)}</span>`, `<button class="btn sm icon" data-open-path="${esc(S.info.dataDir)}">${icon('folder')}</button>`)}
       ${row(esc(t('airportDb')), esc(t('airportDbD', nf().format(S.info.airports))), '')}
+      ${row(esc(t('feedback')), esc(t('feedbackD')), `<button class="btn sm" id="st-feedback">${icon('note')}${esc(t('feedback'))}</button>`)}
       ${row(esc(t('author')), 'Adam Rędzikowski · <a href="#" id="st-site">redzikowski.com</a> · <a href="#" id="st-mail">kontakt@redzikowski.com</a>', `<button class="btn sm" id="st-coffee">${icon('coffee')}${esc(t('coffee'))}</button>`)}
     </div></div>`;
   $$('[data-swk]', v).forEach((b) => (b.onclick = () => { const k = b.dataset.swk; s[k] = !s[k]; b.classList.toggle('on', s[k]); persist(); }));
@@ -1727,6 +1730,7 @@ function viewSettings(v) {
   $('#st-site').onclick = (e) => { e.preventDefault(); opener.openUrl('https://redzikowski.com'); };
   $('#st-mail').onclick = (e) => { e.preventDefault(); opener.openUrl('mailto:kontakt@redzikowski.com'); };
   $('#st-coffee').onclick = () => opener.openUrl('https://buycoffee.to/adamredzikowski');
+  $('#st-feedback').onclick = () => openFeedback();
 }
 function applyTheme() {
   const s = S.settings;
