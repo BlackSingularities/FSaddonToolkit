@@ -1,5 +1,13 @@
 # FS Addon Toolkit
 
+<!-- posters:start -->
+<p align="center">
+  <img src="docs/posters/windows.png" alt="FS Addon Toolkit – Windows" width="460">
+</p>
+
+<p align="center"><a href="https://redzikowski.com/portfolio/fsaddontoolkit">redzikowski.com/portfolio/fsaddontoolkit</a></p>
+<!-- posters:end -->
+
 Menedżer dodatków **Community** dla **Microsoft Flight Simulator 2024** (i 2020) na Windows, napisany w **Rust + Tauri 2**.
 
 Dodatki mogą leżeć na dowolnych dyskach – w folderze Community albo w **bibliotekach** (np. `H:\Dodatki`). Włączenie dodatku z biblioteki tworzy w Community **połączenie katalogu** (junction) do jego folderu, wyłączenie usuwa samo łącze. Pliki nie są kopiowane ani usuwane, a symulator widzi tylko to, co jest włączone – wczytuje się szybciej i zużywa mniej pamięci.

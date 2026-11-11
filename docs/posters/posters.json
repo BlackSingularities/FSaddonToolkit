@@ -1,0 +1,37 @@
+{
+  "slug": "fsaddontoolkit",
+  "name": "FS Addon Toolkit",
+  "label": "menedżer dodatków do MSFS 2024",
+  "icon": "icon.png",
+  "url": "https://redzikowski.com/portfolio/fsaddontoolkit",
+  "posters": [
+    {
+      "platform": "windows",
+      "file": "windows.png",
+      "title": "Dodatki do MSFS *jednym kliknięciem*",
+      "lead": "Samoloty, lotniska i scenerie z dowolnych dysków – z miniaturami, mapą lotnisk, profilami i planem lotu.",
+      "shots": [
+        {
+          "src": "../screenshots/windows/01.png",
+          "caption": "Dodatki"
+        },
+        {
+          "src": "../screenshots/windows/02.png",
+          "caption": "Pulpit"
+        },
+        {
+          "src": "../screenshots/windows/03.png",
+          "caption": "Mapa lotnisk"
+        }
+      ],
+      "features": [
+        "biblioteki na dowolnych dyskach",
+        "bez uprawnień administratora",
+        "mapa lotnisk z plików BGL",
+        "profile i tryb lekki",
+        "MSFS 2024 i 2020"
+      ],
+      "meta": "Windows 10 i 11 · Steam i Microsoft Store"
+    }
+  ]
+}
