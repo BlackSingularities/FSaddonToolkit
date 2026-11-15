@@ -54,6 +54,8 @@ pub struct Settings {
     pub onboarded: bool,
     /// Malowania przy włączaniu samolotu: "ask" | "all" | "none".
     pub livery_prompt: String,
+    /// SimBrief: nazwa pilota (alias Navigraph) albo Pilot ID. Pusty = funkcja nieużywana.
+    pub simbrief_user: String,
 }
 
 impl Default for Settings {
@@ -79,6 +81,7 @@ impl Default for Settings {
             external: vec![],
             onboarded: false,
             livery_prompt: "ask".into(),
+            simbrief_user: String::new(),
         }
     }
 }

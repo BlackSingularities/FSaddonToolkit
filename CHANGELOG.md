@@ -1,5 +1,13 @@
 # Zmiany
 
+## 1.5.0
+
+- Plan lotu z SimBrief (opcjonalnie): w „Przygotuj lot” przycisk „Wczytaj z SimBrief” pobiera ostatni plan pilota – start, cel, lotniska zapasowe (celu, startu i na trasie) i dobiera zainstalowany samolot. Nazwę pilota albo Pilot ID ustawia się w ustawieniach.
+- Nowy widok profili: kolorowy awatar, skład według kategorii, zgodność z bieżącym stanem z podglądem, ile dodatków zostanie włączonych i wyłączonych, rzadsze akcje w menu „⋯”, karta „Zapisz bieżący stan jako nowy profil”.
+- Dopracowany wygląd: spójna skala tekstu i odstępów, czytelne kolory kategorii w jasnym motywie, wyraźny fokus klawiatury, własne listy rozwijane, równe kolumny liczb, rozmiar dodatku zawsze widoczny na kafelku.
+- Szkielet widoku zamiast pustego ekranu przy pierwszym skanie; pusty stan prowadzi od razu do dodania biblioteki, instalacji albo wyczyszczenia filtrów.
+- Poprawka: znaczniki trasy na mapie były za duże i przesunięte względem okręgów.
+
 ## 1.4.0
 
 - Zgłaszanie błędów i sugestii: nowa pozycja „Zgłoś błąd lub sugestię” – opis trafia prosto do autora przez redzikowski.com, e-mail jest opcjonalny.

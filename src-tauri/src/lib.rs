@@ -9,6 +9,7 @@ mod links;
 mod official;
 mod package;
 mod sim;
+mod simbrief;
 mod store;
 mod update;
 
@@ -776,6 +777,11 @@ fn launch_sim(state: St) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn simbrief_fetch(user: String) -> Result<simbrief::Ofp, String> {
+    simbrief::fetch(&user).await
+}
+
+#[tauri::command]
 fn airport_search(query: String) -> Vec<airports::Airport> {
     airports::search(&query, 12)
 }
@@ -901,6 +907,7 @@ pub fn run() {
             sim_status,
             launch_sim,
             airport_search,
+            simbrief_fetch,
             check_update,
             install_update,
         ])

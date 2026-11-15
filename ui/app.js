@@ -33,17 +33,10 @@ const plural = (n, one, few, many) => {
 };
 
 // ───────────── Kategorie ─────────────
-const CATS = [
-  { id: 'aircraft', color: '#5cc4ff' },
-  { id: 'airport', color: '#4fd18b' },
-  { id: 'scenery', color: '#b7a2ff' },
-  { id: 'livery', color: '#ff95b5' },
-  { id: 'utility', color: '#ffc35a' },
-  { id: 'library', color: '#7f8ea3' },
-  { id: 'other', color: '#a3b1c4' },
-];
+// Kolory kategorii pochodzą z tokenów CSS (--cat-*), więc zmieniają się razem z motywem.
+const CATS = ['aircraft', 'airport', 'scenery', 'livery', 'utility', 'library', 'other'].map((id) => ({ id, color: `var(--cat-${id})` }));
 const catOf = (p) => p.meta?.category || p.category || 'other';
-const catColor = (c) => CATS.find((x) => x.id === c)?.color || '#a3b1c4';
+const catColor = (c) => CATS.find((x) => x.id === c)?.color || 'var(--cat-other)';
 const PROFILE_COLORS = ['#5cc4ff', '#4fd18b', '#ffc35a', '#ff95b5', '#b7a2ff', '#ff8a5c', '#7f8ea3'];
 
 // ───────────── Stan ─────────────
@@ -55,7 +48,7 @@ const S = {
   f: { cat: 'all', state: 'all', source: 'all', q: '', fav: false, sort: 'title', dir: 1 },
   selecting: false, sel: new Set(),
   sheetId: null, busy: new Set(),
-  map: null, mapLayers: null, plan: { dep: null, arr: null, radius: 60, corridor: 0, offOthers: true, aircraft: '', offAircraft: false },
+  map: null, mapLayers: null, plan: { dep: null, arr: null, alts: [], withAlts: true, ofp: null, radius: 60, corridor: 0, offOthers: true, aircraft: '', offAircraft: false },
   officialF: { cat: 'all', q: '', state: 'all' },
 };
 const pkgById = (id) => S.scan?.packages.find((p) => p.id === id);
@@ -102,7 +95,7 @@ async function promptBox(title, label, value = '') {
 }
 function opErrors(res, okMsg) {
   if (res.errors?.length) {
-    const list = res.errors.slice(0, 8).map((e) => `<div class="row"><div class="grow"><div class="t">${esc(e.title || '—')}</div><div class="d" style="white-space:normal">${esc(e.message)}</div></div></div>`).join('');
+    const list = res.errors.slice(0, 8).map((e) => `<div class="row"><div class="grow"><div class="t">${esc(e.title || '—')}</div><div class="wrap d">${esc(e.message)}</div></div></div>`).join('');
     dialog({ title: t('someFailed', res.errors.length), body: `<div class="card list">${list}</div>`, actions: [{ label: t('ok'), kind: 'primary' }] });
   } else if (okMsg) {
     toast(okMsg, 'ok', res.batch && res.changed ? { label: t('undo'), run: () => undoBatch(res.batch) } : null);
@@ -125,7 +118,7 @@ T.event.listen('job', ({ payload: j }) => {
     <div class="bar"><span style="width:${j.steps > 1 ? ((j.step - 1 + pct / 100) / j.steps) * 100 : pct}%"></span></div>`;
   if (j.finished) {
     setTimeout(() => { el.remove(); jobs.delete(j.id); }, 1800);
-    if (j.errors.length) dialog({ title: t('jobErrors', j.label), body: `<div class="card list">${j.errors.map((e) => `<div class="row"><div class="grow d" style="white-space:normal">${esc(e)}</div></div>`).join('')}</div>`, actions: [{ label: t('ok'), kind: 'primary' }] });
+    if (j.errors.length) dialog({ title: t('jobErrors', j.label), body: `<div class="card list">${j.errors.map((e) => `<div class="row"><div class="wrap grow d">${esc(e)}</div></div>`).join('')}</div>`, actions: [{ label: t('ok'), kind: 'primary' }] });
     else toast(t('jobDone', j.label, j.changed));
     refresh();
   }
@@ -189,10 +182,10 @@ async function withLiveries(ids, on) {
   const r = await dialog({
     title: on ? t('liveryQOn', planes) : t('liveryQOff', planes),
     body: `<div>${esc(on ? t('liveryQOnD', `${extra.length} ${plural(extra.length, t('liv1'), t('liv2'), t('liv5'))}`) : t('liveryQOffD', extra.length))}</div>
-      <div style="display:flex;gap:8px"><button class="btn sm" id="lv-all">${esc(t('selectAll'))}</button><button class="btn sm ghost" id="lv-none">${esc(t('selectNone'))}</button></div>
-      <div class="card list" style="max-height:360px;overflow:auto">${extra.map((l) => `<label class="rel" style="cursor:pointer"><input type="checkbox" value="${l.id}" ${on ? 'checked' : 'checked'} style="accent-color:var(--acc);width:16px;height:16px">
+      <div class="hstack"><button class="btn sm" id="lv-all">${esc(t('selectAll'))}</button><button class="btn sm ghost" id="lv-none">${esc(t('selectNone'))}</button></div>
+      <div class="scroll-360 card list">${extra.map((l) => `<label class="clickable rel"><input type="checkbox" value="${l.id}" ${on ? 'checked' : 'checked'} class="check-box">
         <div class="th">${l.thumbs[0] ? `<img data-src="${esc(l.thumbs[0])}" alt="">` : ''}</div><div class="grow"><b>${esc(l.title)}</b><small>${esc(l.creator || l.folder)} · ${fmtSize(l.size)}${l.aircraft.length ? ` · ${l.aircraft.length} ${esc(t('variantsShort'))}` : ''}</small></div></label>`).join('')}</div>
-      ${on ? `<div class="faint" style="font-size:12px">${esc(t('liveryPromptHint'))}</div>` : ''}`,
+      ${on ? `<div class="t-sm faint">${esc(t('liveryPromptHint'))}</div>` : ''}`,
     wide: true,
     actions: [{ label: t('cancel'), value: null }, { label: on ? t('withoutLiveries') : t('keepLiveries'), value: [] }, { label: on ? t('enableSelected') : t('disableSelected'), kind: 'primary', value: (w) => $$('input:checked', w).map((i) => i.value) }],
     onOpen: (w) => {
@@ -316,11 +309,18 @@ function topbar(title, sub = '', right = '') {
   $('#topbar').innerHTML = `<div><h1>${esc(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ''}</div><div class="grow"></div>${right}`;
 }
 
+// Szkielet zamiast pustego ekranu przy pierwszym skanie – układ widoku jest od razu widoczny.
+function skeletonHtml() {
+  const card = '<div class="pkg skel" aria-hidden="true"><div class="thumb"></div><div class="body"><i class="sk sk-pill"></i><i class="sk sk-line"></i></div></div>';
+  const kpis = S.view === 'dashboard' ? `<div class="kpis">${'<div class="kpi skel" aria-hidden="true"><i class="sk sk-line"></i><i class="sk sk-num"></i></div>'.repeat(6)}</div>` : '';
+  return `<div class="skel-status" role="status">${icon('refresh', 'spin')}<span>${esc(t('scanning'))}</span></div>${kpis}<div class="grid">${card.repeat(12)}</div>`;
+}
+
 function renderView() {
   const v = $('#view');
   v.classList.toggle('flush', S.view === 'map');
   $('#bulk').classList.remove('show');
-  if (!S.scan) { topbar(t('appName')); v.innerHTML = `<div class="loading">${icon('refresh', 'spin')}<div>${esc(t('scanning'))}</div></div>`; return; }
+  if (!S.scan) { topbar(t('appName')); v.innerHTML = skeletonHtml(); return; }
   ({ dashboard: viewDashboard, addons: viewAddons, map: viewMap, profiles: viewProfiles, official: viewOfficial, health: viewHealth, history: viewHistory, settings: viewSettings }[S.view] || viewDashboard)(v);
 }
 
@@ -404,7 +404,7 @@ function viewDashboard(v) {
       ${panel('profiles', t('quickProfiles'), `<div class="list">${S.profiles.length ? S.profiles.slice(0, 6).map((p) => `<div class="row click" data-prof="${p.id}">
           <span class="cdot" style="background:${p.color || PROFILE_COLORS[0]}"></span>
           <div class="grow"><div class="t">${esc(p.name)}</div><div class="d">${p.packages.length} ${esc(plural(p.packages.length, t('pkg1'), t('pkg2'), t('pkg5')))}</div></div>
-          ${profileMatch(p) === 1 ? `<span class="tag ok">${icon('check')}${esc(t('active'))}</span>` : `<button class="btn sm" data-apply="${p.id}">${esc(t('apply'))}</button>`}</div>`).join('') : `<div class="row"><div class="grow d" style="white-space:normal">${esc(t('noProfilesHint'))}</div></div>`}</div>`, more('d-prof'))}
+          ${profileMatch(p) === 1 ? `<span class="tag ok">${icon('check')}${esc(t('active'))}</span>` : `<button class="btn sm" data-apply="${p.id}">${esc(t('apply'))}</button>`}</div>`).join('') : `<div class="row"><div class="wrap grow d">${esc(t('noProfilesHint'))}</div></div>`}</div>`, more('d-prof'))}
 
       ${panel('globe', t('dCountries'), `<div class="ctable">${countries.sort((a, b) => b.items.length - a.items.length).slice(0, 9).map((g) => { const n = g.items.filter((p) => p.enabled).length; return `<div class="crow click" data-gocountry="${esc(g.cc)}">
           ${flag(g.cc)}<span class="cname">${esc(g.name)}</span><span class="mono cnum">${n}/${g.items.length}</span>${bar(n, g.items.length, catColor('airport'))}</div>`; }).join('') || `<div class="d faint">—</div>`}</div>`, countries.length > 9 ? `<span class="faint mono">+${countries.length - 9}</span>` : '')}
@@ -474,8 +474,8 @@ function renderDiskList() {
     const used = 1 - d.free / d.total;
     const libs = S.scan.libraries.filter((l) => l.path.toUpperCase().startsWith(d.mount.toUpperCase().slice(0, 3))).map((l) => l.name);
     const isCommunity = S.scan.target.toUpperCase().startsWith(d.mount.toUpperCase().slice(0, 3));
-    return `<div class="row"><div class="disk" style="width:100%"><div class="disk-letter">${esc(d.mount.slice(0, 2))}</div>
-      <div class="t" style="font-size:13px">${esc([isCommunity ? 'Community' : '', ...libs].filter(Boolean).join(' · ') || d.name)}</div>
+    return `<div class="row"><div class="w-full disk"><div class="disk-letter">${esc(d.mount.slice(0, 2))}</div>
+      <div class="t-md t">${esc([isCommunity ? 'Community' : '', ...libs].filter(Boolean).join(' · ') || d.name)}</div>
       <div class="mono faint">${esc(t('freeOf', fmtSize(d.free), fmtSize(d.total)))}</div>
       <div class="bar"><span class="${d.free / d.total < 0.08 ? 'low' : ''}" style="width:${used * 100}%"></span></div></div></div>`;
   }).join('') : `<div class="row"><div class="grow d">—</div></div>`;
@@ -571,17 +571,17 @@ function cardHtml(p) {
     <div class="body">
       <span class="catpill">${icon(cat)}${esc(t('cat_' + cat))}</span>
       <span class="src" title="${esc(sourceLabel(p))}">${icon(p.link ? 'link' : p.source === 'community' ? 'folder' : p.source === 'parking' ? 'eyeoff' : 'library')}<span>${esc(sourceLabel(p))}</span></span>
-      <span class="meta">${p.version ? `v${esc(p.version)} · ` : ''}${fmtSize(p.size)}</span>
+      <span class="meta">${p.version ? `<span class="ver">v${esc(p.version)} · </span>` : ''}${fmtSize(p.size)}</span>
     </div></div>`;
 }
 function rowHtml(p) {
   const cat = catOf(p);
   return `<tr class="${p.enabled ? '' : 'off'} ${S.sel.has(p.id) ? 'sel' : ''}" data-id="${p.id}">
-    <td style="width:52px"><button class="switch ${p.enabled ? 'on' : ''}" data-sw="${p.id}"></button></td>
-    <td style="width:76px"><div class="mini">${p.thumbs[0] ? `<img data-src="${esc(p.thumbs[0])}" alt="">` : ''}</div></td>
+    <td class="w-52"><button class="switch ${p.enabled ? 'on' : ''}" data-sw="${p.id}"></button></td>
+    <td class="w-76"><div class="mini">${p.thumbs[0] ? `<img data-src="${esc(p.thumbs[0])}" alt="">` : ''}</div></td>
     <td><div class="lt">${p.meta.favorite ? '★ ' : ''}${esc(p.title)}</div><div class="ld mono">${esc(p.folder)}</div></td>
     <td><span class="tag" style="color:${catColor(cat)}">${icon(cat)}${esc(t('cat_' + cat))}</span></td>
-    <td><div class="ld" style="color:var(--text-2)">${esc(p.creator)}</div></td>
+    <td><div class="muted ld">${esc(p.creator)}</div></td>
     <td>${badgeIcao(p)}</td>
     <td><div class="ld">${p.link ? icon('link') : ''} ${esc(sourceLabel(p))}</div></td>
     <td class="num">${esc(p.version)}</td>
@@ -602,15 +602,15 @@ function viewAddons(v) {
   const sources = [['all', t('allSources')], ['community', t('src_community')], ...sc.libraries.map((l) => [`lib:${l.id}`, l.name]), ['parking', t('src_parking')], ['external', t('src_external')]]
     .filter(([id]) => id === 'all' || id.startsWith('lib:') || sc.packages.some((p) => p.source === id));
   v.innerHTML = `
-    <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:10px">
+    <div class="toolbar-stack toolbar">
       <div class="chips cats">${['all', ...CATS.map((c) => c.id)].filter((c) => c === 'all' || countCat(c)).map((c) => `<button class="chip ${f.cat === c ? 'on' : ''}" data-fcat="${c}">${icon(c === 'all' ? 'all' : c)}${esc(c === 'all' ? t('all') : t('cat_' + c))}<span class="n">${countCat(c)}</span></button>`).join('')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="hstack wrap-row center">
         <div class="seg">${[['all', t('all')], ['on', t('enabled')], ['off', t('disabled')]].map(([k, l]) => `<button data-fstate="${k}" class="${f.state === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
-        <select class="inp" id="fsource" style="height:30px;border-radius:999px">${sources.map(([id, l]) => `<option value="${esc(id)}" ${f.source === id ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        <select class="inp-pill inp" id="fsource">${sources.map(([id, l]) => `<option value="${esc(id)}" ${f.source === id ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
         <button class="chip ${f.fav ? 'on' : ''}" id="ffav">${icon('star')}${esc(t('favorites'))}</button>
         ${f.cat === 'airport' ? `<button class="chip ${grouped ? 'on' : ''}" id="fgroup">${icon('globe')}${esc(t('groupByCountry'))}</button>` : ''}
-        <span class="grow" style="flex:1"></span>
-        <select class="inp" id="fsort" style="height:30px;border-radius:999px">${['title', 'creator', 'size', 'date', 'state', 'category'].map((k) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${esc(t('sort_' + k))}</option>`).join('')}</select>
+        <span class="grow grow"></span>
+        <select class="inp-pill inp" id="fsort">${['title', 'creator', 'size', 'date', 'state', 'category'].map((k) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${esc(t('sort_' + k))}</option>`).join('')}</select>
         <button class="btn sm icon" id="fdir" title="${esc(t('reverse'))}">${icon('sort')}</button>
         <div class="seg"><button data-vw="grid" class="${S.settings.view !== 'list' ? 'on' : ''}" title="${esc(t('gridView'))}">${icon('grid')}</button><button data-vw="list" class="${S.settings.view === 'list' ? 'on' : ''}" title="${esc(t('listView'))}">${icon('list')}</button></div>
         <button class="btn sm ${S.selecting ? 'primary' : ''}" id="fselect">${icon('select')}${esc(t('select'))}</button>
@@ -619,7 +619,15 @@ function viewAddons(v) {
     <div id="pkglist" class="${S.selecting ? 'selecting' : ''}"></div>`;
   const box = $('#pkglist');
   if (!list.length) {
-    box.innerHTML = `<div class="empty">${icon('addons')}<h3>${esc(sc.packages.length ? t('noMatches') : t('noAddons'))}</h3><div>${esc(sc.packages.length ? t('noMatchesHint') : t('noAddonsHint'))}</div></div>`;
+    // Pusty stan zawsze podaje następny krok: wyczyść filtry albo dodaj bibliotekę / zainstaluj.
+    const none = !sc.packages.length;
+    box.innerHTML = `<div class="empty">${icon(none ? 'library' : 'search')}<h3>${esc(none ? t('noAddons') : t('noMatches'))}</h3>
+      <div class="measure">${esc(none ? t('noAddonsHint') : t('noMatchesHint'))}</div>
+      <div class="empty-actions">${none
+        ? `<button class="btn primary" id="e-addlib">${icon('plus')}${esc(t('addLibrary'))}</button><button class="btn" id="e-install">${icon('download')}${esc(t('install'))}</button>`
+        : `<button class="btn" id="e-clear">${icon('close')}${esc(t('clearFilters'))}</button>`}</div></div>`;
+    if (none) { $('#e-addlib').onclick = pickLibrary; $('#e-install').onclick = () => installDialog(); }
+    else $('#e-clear').onclick = () => { Object.assign(S.f, { cat: 'all', state: 'all', source: 'all', q: '', fav: false }); renderView(); };
   } else if (grouped) {
     const groups = byCountry(list);
     list.splice(0, list.length, ...groups.flatMap((g) => g.items));
@@ -782,7 +790,7 @@ async function openSheet(id, keep = false) {
       <div class="top">
         <span class="glass"><span class="dot ${p.enabled ? 'on' : ''}"></span>${esc(p.enabled ? t('enabled') : t('disabled'))}</span>
         ${m.locked ? `<span class="glass">${icon('lock')}${esc(t('locked'))}</span>` : ''}
-        ${m.favorite ? `<span class="glass" style="color:var(--warn)">★</span>` : ''}
+        ${m.favorite ? `<span class="c-warn glass">★</span>` : ''}
         <span class="grow"></span>
         <button class="glass icon" id="sh-close" title="Esc">${icon('close')}</button>
       </div>
@@ -812,20 +820,20 @@ async function openSheet(id, keep = false) {
     </div>
     ${routeHtml(p)}
     <div class="sheet-body">
-      ${prof.length ? `<div class="chips" style="margin-top:14px">${prof.map((x) => `<span class="tag" style="color:${x.color}">${icon('profiles')}${esc(x.name)}</span>`).join('')}</div>` : ''}
-      ${!p.hasLayout ? `<div class="banner warn" style="margin:14px 0 0">${icon('warn')}<div class="grow">${esc(t('noLayoutBanner'))}</div><button class="btn sm" id="s-layout">${esc(t('regenerate'))}</button></div>` : ''}
+      ${prof.length ? `<div class="mt-7 chips">${prof.map((x) => `<span class="tag" style="color:${x.color}">${icon('profiles')}${esc(x.name)}</span>`).join('')}</div>` : ''}
+      ${!p.hasLayout ? `<div class="mt-7 m-0 banner warn">${icon('warn')}<div class="grow">${esc(t('noLayoutBanner'))}</div><button class="btn sm" id="s-layout">${esc(t('regenerate'))}</button></div>` : ''}
       ${related.length ? `<div class="panel"><h4>${icon(cat === 'aircraft' ? 'livery' : 'aircraft')}${esc(cat === 'aircraft' ? t('liveriesFor') : t('baseAircraft'))} <span class="n">${related.length}</span><span class="grow"></span>
         ${cat === 'aircraft' ? `<button class="btn sm ghost" id="s-liv-on">${esc(t('enableAllN', related.filter((x) => !x.enabled).length))}</button>` : ''}</h4>
-        <div style="padding-bottom:6px">${related.slice(0, 40).map(relRow).join('')}</div></div>` : ''}
+        <div class="pb-3">${related.slice(0, 40).map(relRow).join('')}</div></div>` : ''}
       ${variants.length ? `<div class="panel"><h4>${icon('aircraft')}${esc(t('variants'))} <span class="n">${variants.length}</span></h4>
         <div class="vchips">${shownVariants.map((a) => `<span>${esc(a)}</span>`).join('')}${variants.length > shownVariants.length ? `<button id="s-more">${esc(t('showAll', variants.length))}</button>` : ''}</div></div>` : ''}
       ${p.airports.length ? `<div class="panel"><h4>${icon('airport')}${esc(t('airports'))} <span class="n">${p.airports.length}</span></h4><div class="mini-map" id="mini-map"></div>
         <div class="apt-list">${p.airports.slice(0, 120).map((a, i) => `<div class="apt" data-apt="${i}">${icaoTag(a)}<span class="grow">${esc(a.name || '—')}${a.city ? ` <span class="faint">· ${esc(a.city)}</span>` : ''}</span><span class="faint mono">${esc(a.country)}</span></div>`).join('')}</div>
-        ${p.airports.some((a) => a.source === 'name') ? `<div class="faint" style="font-size:12px;padding:0 14px 12px">${esc(t('guessedAirports'))}</div>` : ''}</div>` : ''}
+        ${p.airports.some((a) => a.source === 'name') ? `<div class="t-sm pad-note faint">${esc(t('guessedAirports'))}</div>` : ''}</div>` : ''}
       ${p.dependencies.length ? `<div class="panel"><h4>${icon('merge')}${esc(t('dependencies'))} <span class="n">${p.dependencies.length}</span></h4><div class="apt-list">${p.dependencies.map((d) => { const dep = S.scan.packages.find((x) => x.key === d.name.toLowerCase()); return `<div class="apt" ${dep ? `data-open="${dep.id}"` : ''}><span class="grow mono">${esc(d.name)}</span>${dep ? `<span class="tag ${dep.enabled ? 'ok' : 'warn'}">${esc(dep.enabled ? t('enabled') : t('disabled'))}</span>` : `<span class="tag">${esc(t('notInstalled'))}</span>`}</div>`; }).join('')}</div></div>` : ''}
       <div id="dependents"></div>
       <div id="notes-box"></div>
-      <div class="panel"><h4>${icon('tag')}${esc(t('organize'))}</h4><div class="pad" style="display:flex;flex-direction:column;gap:8px">
+      <div class="panel"><h4>${icon('tag')}${esc(t('organize'))}</h4><div class="vstack pad">
         <select class="inp" id="s-cat"><option value="">${esc(t('autoCategory'))}: ${esc(t('cat_' + p.category))}</option>${CATS.map((c) => `<option value="${c.id}" ${m.category === c.id ? 'selected' : ''}>${esc(t('cat_' + c.id))}</option>`).join('')}</select>
         <div class="tags-in" id="s-tags">${m.tags.map((tg, i) => `<span>${esc(tg)}<button data-rmtag="${i}">×</button></span>`).join('')}<input placeholder="${esc(t('tagsPh'))}"></div>
         <textarea class="inp" id="s-note" rows="2" placeholder="${esc(t('notePh'))}">${esc(m.note)}</textarea></div></div>
@@ -898,10 +906,10 @@ async function openSheet(id, keep = false) {
     const d = await invoke('package_details', { id: p.id });
     if (S.sheetId !== id) return;
     $('#manifest').textContent = d.manifest || '—';
-    if (d.releaseNotes) $('#notes-box').innerHTML = `<div class="panel"><h4>${icon('note')}${esc(t('releaseNotes'))}</h4><div class="pad muted selectable" style="white-space:pre-wrap;font-size:13px">${esc(d.releaseNotes)}</div></div>`;
+    if (d.releaseNotes) $('#notes-box').innerHTML = `<div class="panel"><h4>${icon('note')}${esc(t('releaseNotes'))}</h4><div class="pre t-md pad muted selectable">${esc(d.releaseNotes)}</div></div>`;
     const deps = d.dependents.map((x) => pkgById(x)).filter(Boolean);
     if (deps.length) {
-      $('#dependents').innerHTML = `<div class="panel"><h4>${icon('link')}${esc(t('requiredBy'))} <span class="n">${deps.length}</span></h4><div style="padding-bottom:6px">${deps.map(relRow).join('')}</div></div>`;
+      $('#dependents').innerHTML = `<div class="panel"><h4>${icon('link')}${esc(t('requiredBy'))} <span class="n">${deps.length}</span></h4><div class="pb-3">${deps.map(relRow).join('')}</div></div>`;
       observeThumbs($('#dependents'));
       $$('#dependents [data-open]').forEach((el) => (el.onclick = () => openSheet(el.dataset.open)));
       $$('#dependents [data-sw]').forEach((sw) => (sw.onclick = (e) => { e.stopPropagation(); const x = pkgById(sw.dataset.sw); if (x) toggle([x.id], !x.enabled); }));
@@ -1017,7 +1025,7 @@ function viewMap(v) {
   v.innerHTML = `<div class="map-wrap"><div id="map-holder"><div id="map"></div>
       <div class="map-tools"><button class="btn sm ${S.mapSelectMode ? 'primary' : ''}" id="m-select" title="${esc(t('boxSelectHint'))}">${icon('select')}${esc(t('boxSelect'))}</button></div>
       <div class="map-hint ${S.mapSelectMode ? '' : 'hidden'}" id="m-hint">${esc(t('boxSelectTip'))}</div>
-      <div class="map-legend"><span><i style="background:${cssVar('--ok', '#4fd18b')}"></i>${esc(t('enabled'))}</span><span><i style="background:#7a8799"></i>${esc(t('disabled'))}</span><span><i style="background:transparent;border-color:${cssVar('--acc', '#5cc4ff')}"></i>${esc(t('selected'))}</span></div>
+      <div class="map-legend"><span><i class="dot-on"></i>${esc(t('enabled'))}</span><span><i class="dot-off"></i>${esc(t('disabled'))}</span><span><i class="dot-sel"></i>${esc(t('selected'))}</span></div>
     </div><div class="map-side" id="map-side"></div></div>`;
   if (!window.L) { $('#map').innerHTML = `<div class="empty">${icon('map')}<div>Leaflet?</div></div>`; return; }
   const map = L.map('map', { worldCopyJump: true, preferCanvas: true, zoomControl: true, minZoom: 2, boxZoom: false });
@@ -1126,7 +1134,7 @@ function bindPopup(map, p) {
 function renderMapSide() {
   const side = $('#map-side');
   if (!side) return;
-  side.innerHTML = `<div class="head"><div class="seg" style="align-self:flex-start">
+  side.innerHTML = `<div class="head"><div class="self-start seg">
       <button data-mt="list" class="${mapTab === 'list' ? 'on' : ''}">${icon('list')}${esc(t('inView'))}</button>
       <button data-mt="sel" class="${mapTab === 'sel' ? 'on' : ''}">${icon('select')}${esc(t('selectedTab', S.mapSel.size))}</button>
       <button data-mt="plan" class="${mapTab === 'plan' ? 'on' : ''}">${icon('target')}${esc(t('planTab'))}</button></div></div>
@@ -1182,7 +1190,7 @@ function renderSelection() {
   if (!box) return;
   const items = groupByPkg((p) => S.mapSel.has(p.id));
   if (!items.length) {
-    box.innerHTML = `<div class="empty" style="padding:40px 20px">${icon('select')}<h3>${esc(t('noSelection'))}</h3><div style="font-size:13px">${esc(t('noSelectionHint'))}</div>
+    box.innerHTML = `<div class="empty-sm empty">${icon('select')}<h3>${esc(t('noSelection'))}</h3><div class="t-md">${esc(t('noSelectionHint'))}</div>
       <button class="btn primary" id="sel-mode">${icon('select')}${esc(t('boxSelect'))}</button></div>`;
     $('#sel-mode').onclick = () => setSelectMode(true);
     return;
@@ -1190,7 +1198,7 @@ function renderSelection() {
   const offIds = items.filter((x) => !x.p.enabled).map((x) => x.p.id);
   const onIds = items.filter((x) => x.p.enabled && !x.p.meta.locked).map((x) => x.p.id);
   const size = items.reduce((s, x) => s + x.p.size, 0);
-  box.innerHTML = `<div style="padding:12px 16px 0" class="muted">${esc(t('selSummary', items.length, items.length - offIds.length, fmtSize(size)))}</div>
+  box.innerHTML = `<div class="pad-head muted">${esc(t('selSummary', items.length, items.length - offIds.length, fmtSize(size)))}</div>
     <div class="sel-actions">
       <button class="btn sm primary" id="sel-on" ${offIds.length ? '' : 'disabled'}>${icon('power')}${esc(t('enableAllN', offIds.length))}</button>
       <button class="btn sm" id="sel-off" ${onIds.length ? '' : 'disabled'}>${icon('eyeoff')}${esc(t('disableAllN', onIds.length))}</button>
@@ -1228,7 +1236,7 @@ function computePlan() {
   const P = S.plan;
   if (!P.dep) return null;
   const pts = P.arr ? routePoints(P.dep, P.arr) : [P.dep];
-  const ends = [P.dep, P.arr].filter(Boolean);
+  const ends = [P.dep, P.arr, ...(P.withAlts ? P.alts : [])].filter(Boolean);
   const match = new Map();
   for (const p of S.scan.packages) {
     if (catOf(p) !== 'airport' || !p.airports.length) continue;
@@ -1254,19 +1262,31 @@ function renderPlan() {
   const box = $('#map-scroll');
   const P = S.plan;
   const aircraft = S.scan.packages.filter((p) => catOf(p) === 'aircraft').sort((a, b) => a.title.localeCompare(b.title));
+  const altRole = { alt: t('sbAlt'), toalt: t('sbToAlt'), era: t('sbEra') };
   box.innerHTML = `<div class="plan">
-    <div class="two">
-      <label>${esc(t('departure'))}<div class="ac-wrap"><input class="inp mono" id="pl-dep" placeholder="EPWA" value="${esc(P.dep?.icao || '')}" style="width:100%"></div></label>
-      <label>${esc(t('arrival'))}<div class="ac-wrap"><input class="inp mono" id="pl-arr" placeholder="EPKK" value="${esc(P.arr?.icao || '')}" style="width:100%"></div></label>
+    <div class="sb-box">
+      <div class="hstack center">
+        <button class="btn sm" id="pl-sb">${icon('download')}${esc(t('sbLoad'))}</button>
+        <span class="grow t-sm faint">${P.ofp
+          ? esc([P.ofp.callsign, P.ofp.aircraftIcao, P.ofp.generated && fmtTime(new Date(P.ofp.generated * 1000).toISOString())].filter(Boolean).join(' · '))
+          : esc(S.settings.simbriefUser ? t('sbUserIs', S.settings.simbriefUser) : t('sbHint'))}</span>
+        ${S.settings.simbriefUser ? `<button class="btn sm ghost icon" id="pl-sb-user" title="${esc(t('sbChangeUser'))}">${icon('edit')}</button>` : ''}
+      </div>
+      ${P.alts.length ? `<label class="check-inline check-row"><input type="checkbox" id="pl-alts" ${P.withAlts ? 'checked' : ''}>${esc(t('sbWithAlts'))}</label>
+        <div class="chips">${P.alts.map((a) => `<span class="tag icao" title="${esc(`${altRole[a.role] || ''} · ${a.name}`)}">${flag(a.country)}${esc(a.icao)}</span>`).join('')}</div>` : ''}
     </div>
-    <div class="faint" style="font-size:12px;min-height:16px">${esc([P.dep && `${P.dep.icao} – ${P.dep.name}`, P.arr && `${P.arr.icao} – ${P.arr.name}`, P.dep && P.arr && `${Math.round(haversine(P.dep, P.arr))} km`].filter(Boolean).join(' · '))}</div>
     <div class="two">
-      <label>${esc(t('radius'))} · <b id="pl-rv">${P.radius} km</b><input type="range" id="pl-r" min="5" max="300" step="5" value="${P.radius}" style="accent-color:var(--acc)"></label>
-      <label>${esc(t('corridor'))} · <b id="pl-cv">${P.corridor ? P.corridor + ' km' : t('off')}</b><input type="range" id="pl-c" min="0" max="150" step="5" value="${P.corridor}" style="accent-color:var(--acc)"></label>
+      <label>${esc(t('departure'))}<div class="ac-wrap"><input class="w-full inp mono" id="pl-dep" placeholder="EPWA" value="${esc(P.dep?.icao || '')}"></div></label>
+      <label>${esc(t('arrival'))}<div class="ac-wrap"><input class="w-full inp mono" id="pl-arr" placeholder="EPKK" value="${esc(P.arr?.icao || '')}"></div></label>
+    </div>
+    <div class="t-sm min-line faint">${esc([P.dep && `${P.dep.icao} – ${P.dep.name}`, P.arr && `${P.arr.icao} – ${P.arr.name}`, P.dep && P.arr && `${Math.round(haversine(P.dep, P.arr))} km`].filter(Boolean).join(' · '))}</div>
+    <div class="two">
+      <label>${esc(t('radius'))} · <b id="pl-rv">${P.radius} km</b><input type="range" id="pl-r" min="5" max="300" step="5" value="${P.radius}"></label>
+      <label>${esc(t('corridor'))} · <b id="pl-cv">${P.corridor ? P.corridor + ' km' : t('off')}</b><input type="range" id="pl-c" min="0" max="150" step="5" value="${P.corridor}"></label>
     </div>
     <label>${esc(t('aircraftOpt'))}<select class="inp" id="pl-ac"><option value="">${esc(t('noChange'))}</option>${aircraft.map((a) => `<option value="${a.id}" ${P.aircraft === a.id ? 'selected' : ''}>${esc(a.title)}</option>`).join('')}</select></label>
-    <label class="check-row" style="flex-direction:row;color:var(--text);font-size:13px;align-items:center;gap:8px"><input type="checkbox" id="pl-off" ${P.offOthers ? 'checked' : ''} style="accent-color:var(--acc)">${esc(t('offOtherAirports'))}</label>
-    <label class="check-row" style="flex-direction:row;color:var(--text);font-size:13px;align-items:center;gap:8px"><input type="checkbox" id="pl-offac" ${P.offAircraft ? 'checked' : ''} style="accent-color:var(--acc)">${esc(t('offOtherAircraft'))}</label>
+    <label class="check-inline check-row"><input type="checkbox" id="pl-off" ${P.offOthers ? 'checked' : ''}>${esc(t('offOtherAirports'))}</label>
+    <label class="check-inline check-row"><input type="checkbox" id="pl-offac" ${P.offAircraft ? 'checked' : ''}>${esc(t('offOtherAircraft'))}</label>
     <div id="pl-res"></div></div>`;
   const ac = (inp, key) => {
     let list;
@@ -1279,8 +1299,10 @@ function renderPlan() {
       list.className = 'ac-list';
       list.innerHTML = res.map((a, i) => `<div data-i="${i}"><b class="mono">${esc(a.icao)}</b> ${esc(a.name)} <span class="faint">${esc(a.city)} ${esc(a.country)}</span></div>`).join('');
       inp.parentElement.append(list);
-      $$('[data-i]', list).forEach((d) => (d.onmousedown = () => { P[key] = res[+d.dataset.i]; list.remove(); renderPlan(); drawRoute(); }));
-      if (res.length === 1 && res[0].icao === q.toUpperCase()) { P[key] = res[0]; list.remove(); renderPlan(); drawRoute(); }
+      // Ręczna zmiana lotniska odcina plan z SimBrief (jego lotniska zapasowe przestają pasować).
+      const pick = (a) => { P[key] = a; P.ofp = null; P.alts = []; list.remove(); renderPlan(); drawRoute(); };
+      $$('[data-i]', list).forEach((d) => (d.onmousedown = () => pick(res[+d.dataset.i])));
+      if (res.length === 1 && res[0].icao === q.toUpperCase()) pick(res[0]);
     }, 220);
     inp.onblur = () => setTimeout(() => list?.remove(), 150);
   };
@@ -1291,19 +1313,62 @@ function renderPlan() {
   $('#pl-ac').onchange = (e) => { P.aircraft = e.target.value; renderPlanResult(); };
   $('#pl-off').onchange = (e) => { P.offOthers = e.target.checked; renderPlanResult(); };
   $('#pl-offac').onchange = (e) => { P.offAircraft = e.target.checked; renderPlanResult(); };
+  $('#pl-sb').onclick = () => loadSimbrief();
+  $('#pl-sb-user') && ($('#pl-sb-user').onclick = () => loadSimbrief(true));
+  $('#pl-alts') && ($('#pl-alts').onchange = (e) => { P.withAlts = e.target.checked; renderPlanResult(); drawRoute(false); });
   renderPlanResult();
   drawRoute();
 }
+// ───────────── SimBrief (opcjonalnie) ─────────────
+// Zainstalowany samolot pasujący do typu z planu: po kodzie ICAO (A320) albo oznaczeniu z nazwy (737-800 → 737800).
+function matchAircraft(icao, name) {
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const keys = [norm(icao), ...String(name || '').split(/\s+/).filter((w) => /\d/.test(w)).map(norm)].filter((k) => k.length >= 3);
+  if (!keys.length) return null;
+  const hits = S.scan.packages.filter((p) => catOf(p) === 'aircraft').filter((p) => {
+    const hay = [p.title, p.folder, ...(p.aircraft || []), ...(p.simObjects || [])].map(norm).join('|');
+    return keys.some((k) => hay.includes(k));
+  });
+  return hits.length === 1 ? hits[0] : hits.find((p) => p.enabled) || null;
+}
+async function loadSimbrief(askUser = false) {
+  const P = S.plan;
+  let user = S.settings.simbriefUser || '';
+  if (askUser || !user) {
+    const v = await promptBox(t('sbUserTitle'), t('sbUserLabel'), user);
+    if (v === null) return;
+    S.settings.simbriefUser = v;
+    await saveSettings();
+    user = v;
+    if (!user) { renderPlan(); return; }
+  }
+  const btn = $('#pl-sb');
+  if (btn) { btn.disabled = true; btn.innerHTML = `${icon('refresh', 'spin')}${esc(t('sbLoading'))}`; }
+  try {
+    const o = await invoke('simbrief_fetch', { user });
+    const by = (r) => o.airports.find((a) => a.role === r) || null;
+    P.dep = by('dep'); P.arr = by('arr');
+    P.alts = o.airports.filter((a) => !['dep', 'arr'].includes(a.role));
+    P.ofp = o;
+    const ac = matchAircraft(o.aircraftIcao, o.aircraftName);
+    if (ac) P.aircraft = ac.id;
+    toast(t('sbLoaded', [P.dep?.icao, P.arr?.icao].filter(Boolean).join(' → '), P.alts.length) + (ac ? ` · ${ac.title}` : ''));
+  } catch (e) {
+    toast(errMsg(e), 'bad');
+  }
+  renderPlan();
+}
+
 function renderPlanResult() {
   const box = $('#pl-res');
   if (!box) return;
   const r = computePlan();
-  if (!r) { box.innerHTML = `<div class="faint" style="font-size:13px">${esc(t('planHint'))}</div>`; return; }
-  box.innerHTML = `<div class="section-title" style="margin:6px 0 8px;font-size:13px">${icon('airport')}${esc(t('matchedAirports', r.match.length))}</div>
-    <div class="diff">${r.match.slice(0, 30).map((x) => `<div class="row"><span class="tag icao acc">${esc(x.icao)}</span><div class="grow"><div class="t" style="font-size:13px">${esc(x.p.title)}</div></div><span class="faint mono">${Math.round(x.d)} km</span>${x.p.enabled ? `<span class="tag ok">${icon('check')}</span>` : ''}</div>`).join('') || `<div class="faint" style="font-size:13px">${esc(t('noMatchedAirports'))}</div>`}</div>
-    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+  if (!r) { box.innerHTML = `<div class="t-md faint">${esc(t('planHint'))}</div>`; return; }
+  box.innerHTML = `<div class="section-title-sm section-title">${icon('airport')}${esc(t('matchedAirports', r.match.length))}</div>
+    <div class="diff">${r.match.slice(0, 30).map((x) => `<div class="row"><span class="tag icao acc">${esc(x.icao)}</span><div class="grow"><div class="t-md t">${esc(x.p.title)}</div></div><span class="faint mono">${Math.round(x.d)} km</span>${x.p.enabled ? `<span class="tag ok">${icon('check')}</span>` : ''}</div>`).join('') || `<div class="t-md faint">${esc(t('noMatchedAirports'))}</div>`}</div>
+    <div class="hstack wrap-row mt-6">
       <span class="tag ok">+${r.enable.length}</span><span class="tag bad">−${r.disable.length}</span></div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+    <div class="hstack wrap-row mt-5">
       <button class="btn primary" id="pl-apply" ${r.enable.length || r.disable.length ? '' : 'disabled'}>${icon('check')}${esc(t('applyPlan'))}</button>
       <button class="btn" id="pl-save">${icon('save')}${esc(t('saveAsProfile'))}</button></div>`;
   $('#pl-apply').onclick = async () => {
@@ -1325,6 +1390,11 @@ function drawRoute(fit = true) {
     L.circle([e.lat, e.lon], { radius: P.radius * 1000, ...style }).addTo(g);
     L.marker([e.lat, e.lon], { icon: L.divIcon({ className: '', html: '<div class="apt-pin route"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }) }).addTo(g).bindTooltip(e.icao, { permanent: true, direction: 'top', offset: [0, -10] });
   }
+  // Lotniska zapasowe z SimBrief: przerywane okręgi, mniejsze znaczniki.
+  if (P.withAlts) for (const e of P.alts) {
+    L.circle([e.lat, e.lon], { radius: P.radius * 1000, ...style, dashArray: '4 6', fillOpacity: 0.03 }).addTo(g);
+    L.marker([e.lat, e.lon], { icon: L.divIcon({ className: '', html: '<div class="apt-pin route alt"></div>', iconSize: [14, 14], iconAnchor: [7, 7] }) }).addTo(g).bindTooltip(e.icao, { permanent: true, direction: 'top', offset: [0, -8] });
+  }
   if (P.dep && P.arr) {
     L.polyline(routePoints(P.dep, P.arr).map((q) => [q.lat, q.lon]), { ...style, dashArray: '6 6' }).addTo(g);
     if (fit) S.map.fitBounds([[P.dep.lat, P.dep.lon], [P.arr.lat, P.arr.lon]], { padding: [80, 80], maxZoom: 9 });
@@ -1332,9 +1402,9 @@ function drawRoute(fit = true) {
 }
 
 // ───────────── Profile ─────────────
-const catChecks = (id, selected) => `<div class="field" style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--text-3)">${esc(t('profileScope'))}
-  <div class="chips" id="${id}">${CATS.map((c) => `<label class="chip ${!selected?.length || selected.includes(c.id) ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" value="${c.id}" ${!selected?.length || selected.includes(c.id) ? 'checked' : ''} style="display:none">${icon(c.id)}${esc(t('cat_' + c.id))}</label>`).join('')}</div>
-  <span class="faint" style="font-size:12px">${esc(t('profileScopeHint'))}</span></div>`;
+const catChecks = (id, selected) => `<div class="field field">${esc(t('profileScope'))}
+  <div class="chips" id="${id}">${CATS.map((c) => `<label class="clickable chip ${!selected?.length || selected.includes(c.id) ? 'on' : ''}"><input type="checkbox" value="${c.id}" ${!selected?.length || selected.includes(c.id) ? 'checked' : ''} class="hidden">${icon(c.id)}${esc(t('cat_' + c.id))}</label>`).join('')}</div>
+  <span class="t-sm faint">${esc(t('profileScopeHint'))}</span></div>`;
 const bindCatChecks = (w, id) => $$(`#${id} label`, w).forEach((l) => (l.onclick = (e) => { e.preventDefault(); const i = $('input', l); i.checked = !i.checked; l.classList.toggle('on', i.checked); }));
 // Zakres: puste albo wszystkie kategorie = profil zarządza wszystkim.
 const readCatChecks = (w, id) => { const all = $$(`#${id} input`, w); const on = all.filter((i) => i.checked).map((i) => i.value); return on.length === all.length ? [] : on; };
@@ -1370,10 +1440,10 @@ async function applyProfile(id, additive = false) {
   const d = profileDiff(prof, additive);
   if (!d.enable.length && !d.disable.length && !prof.officialDisabled?.length) { toast(t('profileAlready', prof.name)); return; }
   if (S.settings.confirmBulk && d.enable.length + d.disable.length > 0) {
-    const list = (ids, cls, sign) => ids.slice(0, 40).map((x) => pkgById(x)).filter(Boolean).map((p) => `<div class="row"><span class="tag ${cls}">${sign}</span><div class="grow"><div class="t" style="font-size:13px">${esc(p.title)}</div></div></div>`).join('');
+    const list = (ids, cls, sign) => ids.slice(0, 40).map((x) => pkgById(x)).filter(Boolean).map((p) => `<div class="row"><span class="tag ${cls}">${sign}</span><div class="grow"><div class="t-md t">${esc(p.title)}</div></div></div>`).join('');
     const ok = await confirmBox(`${t('apply')}: ${prof.name}`,
-      `${prof.categories?.length ? `<div class="banner acc" style="margin:0">${icon('filter')}<div>${esc(t('scopeOnly', scopeLabel(prof)))}</div></div>` : ''}<div><span class="tag ok">+${d.enable.length}</span> <span class="tag bad">−${d.disable.length}</span>${d.missing.length ? ` <span class="tag warn">${esc(t('missingN', d.missing.length))}</span>` : ''}</div>
-       <div class="diff" style="max-height:340px;overflow:auto">${list(d.enable, 'ok', '+')}${list(d.disable, 'bad', '−')}</div>`, t('apply'));
+      `${prof.categories?.length ? `<div class="m-0 banner acc">${icon('filter')}<div>${esc(t('scopeOnly', scopeLabel(prof)))}</div></div>` : ''}<div><span class="tag ok">+${d.enable.length}</span> <span class="tag bad">−${d.disable.length}</span>${d.missing.length ? ` <span class="tag warn">${esc(t('missingN', d.missing.length))}</span>` : ''}</div>
+       <div class="scroll-340 diff">${list(d.enable, 'ok', '+')}${list(d.disable, 'bad', '−')}</div>`, t('apply'));
     if (!ok) return;
   }
   await applyChanges(d.enable, d.disable, `${t('profile')}: ${prof.name}`, t('profileApplied', prof.name));
@@ -1418,7 +1488,7 @@ async function addToProfileDialog(ids) {
   if (!S.profiles.length) { await saveCurrentAsProfile(keys); return; }
   const r = await dialog({
     title: t('toProfile'),
-    body: `<div>${esc(t('toProfileQ', keys.length))}</div><div class="card list">${S.profiles.map((p) => `<label class="row click" style="gap:10px"><input type="checkbox" value="${p.id}" style="accent-color:var(--acc)" ${keys.every((k) => p.packages.includes(k)) ? 'checked' : ''}><span style="width:10px;height:10px;border-radius:50%;background:${p.color}"></span><div class="grow t">${esc(p.name)}</div></label>`).join('')}</div>`,
+    body: `<div>${esc(t('toProfileQ', keys.length))}</div><div class="card list">${S.profiles.map((p) => `<label class="gap-5 row click"><input type="checkbox" value="${p.id}" ${keys.every((k) => p.packages.includes(k)) ? 'checked' : ''}><span style="width:10px;height:10px;border-radius:50%;background:${p.color}"></span><div class="grow t">${esc(p.name)}</div></label>`).join('')}</div>`,
     actions: [{ label: t('cancel'), value: null }, { label: t('newProfile'), value: 'new' }, { label: t('save'), kind: 'primary', value: (w) => $$('input:checked', w).map((i) => i.value) }],
   });
   if (r === 'new') { await saveCurrentAsProfile(keys); return; }
@@ -1436,33 +1506,49 @@ function viewProfiles(v) {
   topbar(t('nav_profiles'), esc(t('profilesSub')),
     `<button class="btn" id="p-import">${icon('upload')}${esc(t('import'))}</button><button class="btn primary" id="p-new">${icon('plus')}${esc(t('saveCurrent'))}</button>`);
   const byKey = new Map(S.scan.packages.map((p) => [p.key, p]));
-  v.innerHTML = S.profiles.length ? `<div class="prof-grid">${S.profiles.map((p) => {
+  const sizeOf = (list) => list.reduce((n, x) => n + x.size, 0);
+  const cards = S.profiles.map((p) => {
     const match = profileMatch(p);
+    const active = match === 1;
     const pk = p.packages.map((k) => byKey.get(k)).filter(Boolean);
     const missing = p.packages.length - pk.length;
     const cats = CATS.map((c) => [c, pk.filter((x) => catOf(x) === c.id).length]).filter(([, n]) => n);
-    return `<div class="prof ${match === 1 ? 'active' : ''}" data-pid="${p.id}"><div class="stripe" style="background:${p.color || PROFILE_COLORS[0]}"></div>
-      <div style="display:flex;align-items:center;gap:8px"><h3 style="flex:1">${esc(p.name)}</h3>${match === 1 ? `<span class="tag ok">${icon('check')}${esc(t('active'))}</span>` : `<span class="tag">${Math.round(match * 100)}%</span>`}</div>
-      ${p.note ? `<div class="muted" style="font-size:13px">${esc(p.note)}</div>` : ''}
-      <div class="faint" style="font-size:12.5px">${pk.length} ${esc(plural(pk.length, t('pkg1'), t('pkg2'), t('pkg5')))} · ${fmtSize(pk.reduce((a, x) => a + x.size, 0))}${missing ? ` · <span style="color:var(--warn)">${esc(t('missingN', missing))}</span>` : ''}${p.officialDisabled?.length ? ` · ${esc(t('officialOffN', p.officialDisabled.length))}` : ''}</div>
-      ${p.categories?.length ? `<div class="faint" style="font-size:12.5px;display:flex;gap:6px;align-items:center">${icon('filter')}${esc(t('scopeOnly', scopeLabel(p)))}</div>` : ''}
-      <div class="cats">${cats.map(([c, n]) => `<span class="tag" style="color:${c.color}">${icon(c.id)}${n}</span>`).join('')}</div>
-      <div class="acts">
-        <button class="btn sm primary" data-a="apply">${icon('check')}${esc(t('apply'))}</button>
-        <button class="btn sm" data-a="add" title="${esc(t('additiveHint'))}">${icon('plus')}${esc(t('additive'))}</button>
-        <button class="btn sm icon" data-a="update" title="${esc(t('updateFromCurrent'))}">${icon('refresh')}</button>
-        <button class="btn sm icon" data-a="edit" title="${esc(t('edit'))}">${icon('edit')}</button>
-        <button class="btn sm icon" data-a="dup" title="${esc(t('duplicate'))}">${icon('copy')}</button>
-        <button class="btn sm icon" data-a="export" title="${esc(t('export'))}">${icon('download')}</button>
-        <button class="btn sm icon danger" data-a="del" title="${esc(t('delete'))}">${icon('trash')}</button>
-      </div></div>`;
-  }).join('')}</div>` : `<div class="empty">${icon('profiles')}<h3>${esc(t('noProfiles'))}</h3><div style="max-width:520px">${esc(t('noProfilesHint'))}</div></div>`;
+    const d = profileDiff(p);
+    const pct = Math.round(match * 100);
+    return `<article class="prof ${active ? 'active' : ''}" data-pid="${p.id}" style="--pc:${p.color || PROFILE_COLORS[0]}">
+      <header class="prof-h">
+        <span class="prof-av" aria-hidden="true">${esc((p.name.trim()[0] || '?').toUpperCase())}</span>
+        <div class="grow"><h3>${esc(p.name)}</h3>
+          <div class="prof-meta">${pk.length} ${esc(plural(pk.length, t('pkg1'), t('pkg2'), t('pkg5')))} · ${fmtSize(sizeOf(pk))}${missing ? ` · <span class="c-warn">${esc(t('missingN', missing))}</span>` : ''}${p.officialDisabled?.length ? ` · ${esc(t('officialOffN', p.officialDisabled.length))}` : ''}</div></div>
+        ${active ? `<span class="tag ok">${icon('check')}${esc(t('isActive'))}</span>` : ''}
+        <button class="btn sm ghost icon" data-a="more" title="${esc(t('moreActions'))}" aria-haspopup="menu">${icon('more')}</button>
+      </header>
+      ${p.note ? `<p class="prof-note">${esc(p.note)}</p>` : ''}
+      ${p.categories?.length ? `<div><span class="tag acc">${icon('filter')}${esc(t('scopeOnly', scopeLabel(p)))}</span></div>` : ''}
+      ${pk.length ? `<div class="prof-cats">
+        <div class="meter">${cats.map(([c, n]) => `<span style="width:${(n / pk.length) * 100}%;background:${c.color}"></span>`).join('')}</div>
+        <div class="legend">${cats.map(([c, n]) => `<span><i style="background:${c.color}"></i>${esc(t('cat_' + c.id))} <b>${n}</b></span>`).join('')}</div></div>` : ''}
+      <div class="prof-match">
+        <div class="hstack center"><span class="grow">${esc(t('profMatch'))}</span><b class="mono">${pct}%</b></div>
+        <div class="mbar"><span style="width:${pct}%;background:var(--pc)"></span></div>
+        <div class="prof-will">${d.enable.length || d.disable.length
+          ? `<span><b class="c-ok">+${d.enable.length}</b> ${esc(t('profWillOn'))}</span><span class="faint">·</span><span><b class="c-bad">−${d.disable.length}</b> ${esc(t('profWillOff'))}</span>`
+          : `<span>${esc(t('profNothing'))}</span>`}</div>
+      </div>
+      <footer class="prof-acts">
+        <button class="btn sm ${active ? '' : 'primary'} grow" data-a="apply" ${active ? 'disabled' : ''}>${icon('check')}${esc(active ? t('isActive') : t('apply'))}</button>
+        <button class="btn sm" data-a="add" title="${esc(t('additiveHint'))}" ${d.enable.length ? '' : 'disabled'}>${icon('plus')}${esc(t('additive'))}</button>
+      </footer></article>`;
+  }).join('');
+  v.innerHTML = S.profiles.length
+    ? `<div class="prof-grid">${cards}<button class="prof prof-new" id="p-new2">${icon('plus')}<span>${esc(t('newProfileCard'))}</span></button></div>`
+    : `<div class="empty">${icon('profiles')}<h3>${esc(t('noProfiles'))}</h3><div class="measure">${esc(t('noProfilesHint'))}</div><div class="empty-actions"><button class="btn primary" id="p-new2">${icon('plus')}${esc(t('saveCurrent'))}</button></div></div>`;
+  $('#p-new2').onclick = () => saveCurrentAsProfile();
   $('#p-new').onclick = () => saveCurrentAsProfile();
   $('#p-import').onclick = importProfile;
   $$('[data-pid]', v).forEach((card) => {
     const prof = S.profiles.find((p) => p.id === card.dataset.pid);
-    $$('[data-a]', card).forEach((b) => (b.onclick = async () => {
-      const a = b.dataset.a;
+    const run = async (a) => {
       if (a === 'apply') applyProfile(prof.id);
       if (a === 'add') applyProfile(prof.id, true);
       if (a === 'update') {
@@ -1493,8 +1579,50 @@ function viewProfiles(v) {
         if (!(await confirmBox(t('delete'), `<div>${esc(t('deleteProfileQ', prof.name))}</div>`, t('delete')))) return;
         S.profiles = S.profiles.filter((p) => p.id !== prof.id); await saveProfiles(); renderView();
       }
+    };
+    $$('[data-a]', card).forEach((b) => (b.onclick = (e) => {
+      if (b.dataset.a !== 'more') return run(b.dataset.a);
+      e.stopPropagation();
+      popMenu(b, [
+        { id: 'update', icon: 'refresh', label: t('updateFromCurrent') },
+        { id: 'edit', icon: 'edit', label: t('edit') },
+        { id: 'dup', icon: 'copy', label: t('duplicate') },
+        { id: 'export', icon: 'download', label: t('export') },
+        { sep: true },
+        { id: 'del', icon: 'trash', label: t('delete'), danger: true },
+      ], run);
     }));
   });
+}
+
+// Menu kontekstowe przy przycisku: Esc, klik obok i przewinięcie zamykają; strzałki przechodzą po pozycjach.
+function popMenu(anchor, items, onPick) {
+  $('.menu')?.remove();
+  const m = document.createElement('div');
+  m.className = 'menu';
+  m.setAttribute('role', 'menu');
+  m.innerHTML = items.map((x) => (x.sep ? '<hr>' : `<button role="menuitem" class="${x.danger ? 'danger' : ''}" data-m="${x.id}">${icon(x.icon)}${esc(x.label)}</button>`)).join('');
+  $('#layers').append(m);
+  const r = anchor.getBoundingClientRect();
+  const w = m.offsetWidth; const h = m.offsetHeight;
+  m.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+  m.style.top = `${r.bottom + h + 6 > innerHeight ? r.top - h - 6 : r.bottom + 6}px`;
+  const btns = $$('button', m);
+  const close = () => { m.remove(); document.removeEventListener('mousedown', outside, true); document.removeEventListener('keydown', key, true); $('#view').removeEventListener('scroll', close); anchor.focus(); };
+  const outside = (e) => { if (!m.contains(e.target)) close(); };
+  const key = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const i = btns.indexOf(document.activeElement);
+      btns[(i + (e.key === 'ArrowDown' ? 1 : btns.length - 1)) % btns.length].focus();
+    }
+  };
+  btns.forEach((b) => (b.onclick = () => { close(); onPick(b.dataset.m); }));
+  document.addEventListener('mousedown', outside, true);
+  document.addEventListener('keydown', key, true);
+  $('#view').addEventListener('scroll', close, { once: true });
+  btns[0]?.focus();
 }
 async function importProfile() {
   const path = await dlg.open({ multiple: false, filters: [{ name: 'JSON', extensions: ['json'] }] });
@@ -1526,12 +1654,12 @@ async function viewOfficial(v) {
   const off = L0.packages.filter((p) => !p.enabled).length;
   v.innerHTML = `
     <div class="banner warn">${icon('warn')}<div class="grow">${esc(t('officialWarn'))}</div></div>
-    <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:10px">
+    <div class="toolbar-stack toolbar">
       <div class="chips">${cats.filter((c) => count(c)).map((c) => `<button class="chip ${F.cat === c ? 'on' : ''}" data-oc="${c}">${icon(c === 'all' ? 'all' : c === 'core' ? 'official' : c)}${esc(c === 'all' ? t('all') : c === 'core' ? t('cat_core') : t('cat_' + c))}<span class="n">${count(c)}</span></button>`).join('')}</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="hstack wrap-row center">
         <div class="seg">${[['all', t('all')], ['on', t('enabled')], ['off', `${t('disabled')} (${off})`]].map(([k, l]) => `<button data-os="${k}" class="${F.state === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
-        <span style="flex:1"></span>
-        <span class="faint mono" style="font-size:11.5px">${esc(L0.path)}</span>
+        <span class="grow"></span>
+        <span class="t-xs faint mono">${esc(L0.path)}</span>
         <button class="btn sm ${L0.readonly ? 'primary' : ''}" id="o-ro" title="${esc(t('readonlyHint'))}">${icon(L0.readonly ? 'lock' : 'unlock')}${esc(t('readonly'))}</button>
         <button class="btn sm" id="o-bak">${icon('history')}${esc(t('backups'))}</button>
         <button class="btn sm" id="o-on" ${list.some((p) => !p.enabled) ? '' : 'disabled'}>${icon('power')}${esc(t('enableShown'))}</button>
@@ -1540,11 +1668,11 @@ async function viewOfficial(v) {
     </div>
     ${list.length ? `<table class="table"><thead><tr><th></th><th></th><th>${esc(t('colName'))}</th><th>${esc(t('colCat'))}</th><th>${esc(t('colCreator'))}</th><th>ICAO</th><th>${esc(t('generation'))}</th></tr></thead><tbody>
       ${list.slice(0, 1500).map((p) => `<tr class="${p.enabled ? '' : 'off'}" data-on="${esc(p.name)}">
-        <td style="width:52px"><button class="switch ${p.enabled ? 'on' : ''}" data-osw="${esc(p.name)}"></button></td>
-        <td style="width:76px"><div class="mini">${p.thumb ? `<img data-src="${esc(p.thumb)}" alt="">` : ''}</div></td>
+        <td class="w-52"><button class="switch ${p.enabled ? 'on' : ''}" data-osw="${esc(p.name)}"></button></td>
+        <td class="w-76"><div class="mini">${p.thumb ? `<img data-src="${esc(p.thumb)}" alt="">` : ''}</div></td>
         <td><div class="lt">${esc(p.title)}</div><div class="ld mono">${esc(p.name)}</div></td>
         <td><span class="tag">${esc(p.category === 'core' ? t('cat_core') : t('cat_' + p.category))}</span></td>
-        <td><div class="ld" style="color:var(--text-2)">${esc(p.creator)}</div></td>
+        <td><div class="muted ld">${esc(p.creator)}</div></td>
         <td>${p.icao ? `<span class="tag icao acc">${esc(p.icao)}</span>` : ''}</td>
         <td class="num">${esc(p.generation.toUpperCase())}${p.onDisk ? ` · ${icon('drive')}` : ''}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${icon('official')}<h3>${esc(t('noMatches'))}</h3></div>`}`;
   observeThumbs(v);
@@ -1573,7 +1701,7 @@ async function viewOfficial(v) {
     const list = await invoke('official_backups');
     const r = await dialog({
       title: t('backups'),
-      body: list.length ? `<div>${esc(t('backupsHint'))}</div><div class="card list">${list.map((b) => `<label class="row click" style="gap:10px"><input type="radio" name="bk" value="${esc(b)}" style="accent-color:var(--acc)"><div class="grow mono" style="font-size:12px">${esc(b.split(/[\\/]/).pop())}</div></label>`).join('')}</div>` : `<div>${esc(t('noBackups'))}</div>`,
+      body: list.length ? `<div>${esc(t('backupsHint'))}</div><div class="card list">${list.map((b) => `<label class="gap-5 row click"><input type="radio" name="bk" value="${esc(b)}"><div class="t-sm grow mono">${esc(b.split(/[\\/]/).pop())}</div></label>`).join('')}</div>` : `<div>${esc(t('noBackups'))}</div>`,
       actions: [{ label: t('cancel'), value: null }, ...(list.length ? [{ label: t('restore'), kind: 'primary', value: (w) => $('input:checked', w)?.value }] : [])],
     });
     if (!r) return;
@@ -1593,13 +1721,13 @@ function viewHealth(v) {
   const C = 2 * Math.PI * 30;
   v.innerHTML = `<div class="card health-score">
       <svg class="ring" viewBox="0 0 74 74"><circle cx="37" cy="37" r="30" fill="none" stroke="var(--s3)" stroke-width="8"/><circle cx="37" cy="37" r="30" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(C * score) / 100} ${C}" transform="rotate(-90 37 37)"/><text x="37" y="43" text-anchor="middle" font-size="18" font-weight="700" fill="currentColor">${score}</text></svg>
-      <div><div style="font:600 19px var(--font-display)">${esc(I.length ? t('issuesFound', I.length) : t('allGood'))}</div>
-      <div class="chips" style="margin-top:8px"><span class="tag bad">${e} ${esc(t('errors'))}</span><span class="tag warn">${w} ${esc(t('warnings'))}</span><span class="tag acc">${n} ${esc(t('tips'))}</span></div></div></div>
-    ${I.length ? `<div class="card list" style="margin-top:16px">${I.map((i) => `<div class="issue">
+      <div><div class="title-lg">${esc(I.length ? t('issuesFound', I.length) : t('allGood'))}</div>
+      <div class="mt-4 chips"><span class="tag bad">${e} ${esc(t('errors'))}</span><span class="tag warn">${w} ${esc(t('warnings'))}</span><span class="tag acc">${n} ${esc(t('tips'))}</span></div></div></div>
+    ${I.length ? `<div class="mt-8 card list">${I.map((i) => `<div class="issue">
       <div class="sev ${i.severity}">${icon(i.severity === 'error' ? 'error' : i.severity === 'warn' ? 'warn' : 'info')}</div>
       <div class="grow"><div class="t">${esc(i.title)}</div><div class="d">${esc(i.detail)}</div>
         ${i.paths.length ? `<div class="paths">${i.paths.slice(0, 6).map((p) => `<span>${esc(p)}</span>`).join('')}</div>` : ''}
-        ${i.packages.length && i.kind !== 'native' ? `<div class="chips" style="margin-top:8px">${i.packages.slice(0, 6).map((id) => pkgById(id)).filter(Boolean).map((p) => `<button class="chip" data-open="${p.id}" style="height:26px;font-size:12px">${esc(p.title)}</button>`).join('')}</div>` : ''}
+        ${i.packages.length && i.kind !== 'native' ? `<div class="mt-4 chips">${i.packages.slice(0, 6).map((id) => pkgById(id)).filter(Boolean).map((p) => `<button class="chip-xs chip" data-open="${p.id}">${esc(p.title)}</button>`).join('')}</div>` : ''}
       </div>
       ${i.fix ? `<button class="btn sm" data-fix="${esc(i.id)}">${icon('wand')}${esc(t('fix_' + i.fix) || i.fixLabel)}</button>` : ''}</div>`).join('')}</div>` : ''}`;
   $$('[data-open]', v).forEach((b) => (b.onclick = () => openSheet(b.dataset.open)));
@@ -1630,7 +1758,7 @@ async function viewHistory(v) {
   }
   const opIcon = (k) => ({ link: 'link', unlink: 'unlink', move: 'move', official: 'official' }[k] || 'info');
   v.innerHTML = batches.length ? `<div class="card list">${batches.slice(0, 300).map((b) => `<div class="batch ${b.undone ? 'undone' : ''}">
-    <div class="head"><div class="grow"><div class="t" style="font-weight:650">${esc(b.label)}</div><div class="faint" style="font-size:12.5px">${esc(fmtTime(b.at))} · ${b.items.length} ${esc(plural(b.items.length, t('op1'), t('op2'), t('op5')))}</div></div>
+    <div class="head"><div class="grow"><div class="strong t">${esc(b.label)}</div><div class="t-sm faint">${esc(fmtTime(b.at))} · ${b.items.length} ${esc(plural(b.items.length, t('op1'), t('op2'), t('op5')))}</div></div>
     ${b.undone ? `<span class="tag">${esc(t('undoneTag'))}</span>` : `<button class="btn sm" data-undo="${b.batch}">${icon('undo')}${esc(t('undo'))}</button>`}</div>
     <div class="items">${b.items.slice(0, 24).map((e) => `<span class="tag" title="${esc(JSON.stringify(e.op))}">${icon(opIcon(e.op.kind))}${esc(e.title)}</span>`).join('')}${b.items.length > 24 ? `<span class="tag">+${b.items.length - 24}</span>` : ''}</div></div>`).join('')}</div>`
     : `<div class="empty">${icon('history')}<h3>${esc(t('noHistory'))}</h3><div>${esc(t('noHistoryHint'))}</div></div>`;
@@ -1661,31 +1789,32 @@ function viewSettings(v) {
     <div class="card set-card"><h3>${icon('aircraft')}${esc(t('setSim'))}</h3>
       ${row(esc(t('installation')), esc(t('installationD')), `<select class="inp" id="st-inst">${S.installs.map((i) => `<option value="${i.id}" ${(s.installationId || S.installs[0]?.id) === i.id ? 'selected' : ''}>${esc(i.label)}</option>`).join('') || `<option>${esc(t('noSim'))}</option>`}</select>`)}
       ${sc.installation ? row(esc(t('packagesPath')), `<span class="mono selectable">${esc(sc.installation.packagesPath)}</span>`, `<button class="btn sm" data-open-path="${esc(sc.installation.packagesPath)}">${icon('folder')}</button>`) : ''}
-      ${row(esc(t('customCommunity')), esc(t('customCommunityD')), `<div style="display:flex;gap:6px"><input class="inp mono" id="st-cc" value="${esc(s.customCommunity)}" placeholder="${esc(t('auto'))}" style="width:280px"><button class="btn sm icon" id="st-cc-pick">${icon('folder')}</button></div>`)}
+      ${row(esc(t('customCommunity')), esc(t('customCommunityD')), `<div class="hstack gap-3"><input class="w-280 inp mono" id="st-cc" value="${esc(s.customCommunity)}" placeholder="${esc(t('auto'))}"><button class="btn sm icon" id="st-cc-pick">${icon('folder')}</button></div>`)}
       ${(sc.communities || []).length > 1 ? row(esc(t('targetCommunity')), esc(t('targetCommunityD')), `<select class="inp" id="st-tc">${sc.communities.map((c) => `<option value="${esc(c)}" ${sc.target === c ? 'selected' : ''}>${esc(c.split('\\').pop())}</option>`).join('')}</select>`) : ''}
-      ${row(esc(t('parking')), `${esc(t('parkingD'))}<br><span class="mono selectable">${esc(sc.parking || '')}</span>`, `<div style="display:flex;gap:6px"><input class="inp mono" id="st-park" value="${esc(s.parking)}" placeholder="${esc(t('auto'))}" style="width:280px"><button class="btn sm icon" id="st-park-pick">${icon('folder')}</button></div>`)}
+      ${row(esc(t('simbriefUser')), esc(t('simbriefUserD')), `<input class="w-280 inp mono" id="st-sb" value="${esc(s.simbriefUser || '')}" placeholder="—">`)}
+      ${row(esc(t('parking')), `${esc(t('parkingD'))}<br><span class="mono selectable">${esc(sc.parking || '')}</span>`, `<div class="hstack gap-3"><input class="w-280 inp mono" id="st-park" value="${esc(s.parking)}" placeholder="${esc(t('auto'))}"><button class="btn sm icon" id="st-park-pick">${icon('folder')}</button></div>`)}
     </div>
-    <div class="card set-card"><h3>${icon('library')}${esc(t('libraries'))}<span style="flex:1"></span><button class="btn sm primary" id="st-addlib">${icon('plus')}${esc(t('addLibrary'))}</button></h3>
-      <div class="set-row" style="border-top:0;padding-top:0"><div class="d">${esc(t('librariesD'))}</div></div>
+    <div class="card set-card"><h3>${icon('library')}${esc(t('libraries'))}<span class="grow"></span><button class="btn sm primary" id="st-addlib">${icon('plus')}${esc(t('addLibrary'))}</button></h3>
+      <div class="flush-top set-row"><div class="d">${esc(t('librariesD'))}</div></div>
       ${s.libraries.map((l) => { const st = libStats.get(l.id); return `<div class="lib-row"><div class="icon-box ${st && !st.exists ? 'bad' : ''}">${icon(st && !st.exists ? 'warn' : 'drive')}</div>
-        <div class="grow"><input class="name" data-lname="${l.id}" value="${esc(l.name)}"><div class="d mono faint" style="font-size:12px">${esc(l.path)}</div>
-        <div class="faint" style="font-size:12px">${st ? (st.exists ? esc(t('libStat', st.count, st.enabled, fmtSize(st.size))) : esc(t('libMissing'))) : ''}</div></div>
+        <div class="grow"><input class="name" data-lname="${l.id}" value="${esc(l.name)}"><div class="t-sm d mono faint">${esc(l.path)}</div>
+        <div class="t-sm faint">${st ? (st.exists ? esc(t('libStat', st.count, st.enabled, fmtSize(st.size))) : esc(t('libMissing'))) : ''}</div></div>
         <button class="btn sm icon" data-open-path="${esc(l.path)}" title="${esc(t('openFolder'))}">${icon('folder')}</button>
         <button class="btn sm icon danger" data-rmlib="${l.id}" title="${esc(t('remove'))}">${icon('trash')}</button></div>`; }).join('') || `<div class="lib-row"><div class="grow muted">${esc(t('noLibraries'))}</div></div>`}
-      ${sc.suggestedLibraries?.length ? sc.suggestedLibraries.map((x) => `<div class="lib-row"><div class="icon-box">${icon('link')}</div><div class="grow"><div class="t">${esc(t('suggestedLib'))}</div><div class="d mono faint" style="font-size:12px">${esc(x.path)}</div><div class="faint" style="font-size:12px">${esc(t('suggestedLibD', x.links, x.packages))}</div></div><button class="btn sm" data-sugg="${esc(x.path)}">${icon('plus')}${esc(t('add'))}</button></div>`).join('') : ''}
+      ${sc.suggestedLibraries?.length ? sc.suggestedLibraries.map((x) => `<div class="lib-row"><div class="icon-box">${icon('link')}</div><div class="grow"><div class="t">${esc(t('suggestedLib'))}</div><div class="t-sm d mono faint">${esc(x.path)}</div><div class="t-sm faint">${esc(t('suggestedLibD', x.links, x.packages))}</div></div><button class="btn sm" data-sugg="${esc(x.path)}">${icon('plus')}${esc(t('add'))}</button></div>`).join('') : ''}
     </div>
     <div class="card set-card"><h3>${icon('link')}${esc(t('setBehavior'))}</h3>
-      ${row(esc(t('linkMode')), esc(t('linkModeD')), `<select class="inp" id="st-lm" style="width:240px"><option value="junction" ${s.linkMode !== 'symlink' ? 'selected' : ''}>${esc(t('junction'))}</option><option value="symlink" ${s.linkMode === 'symlink' ? 'selected' : ''}>${esc(t('symlink'))}</option></select>`)}
+      ${row(esc(t('linkMode')), esc(t('linkModeD')), `<select class="w-240 inp" id="st-lm"><option value="junction" ${s.linkMode !== 'symlink' ? 'selected' : ''}>${esc(t('junction'))}</option><option value="symlink" ${s.linkMode === 'symlink' ? 'selected' : ''}>${esc(t('symlink'))}</option></select>`)}
       ${row(esc(t('blockRunning')), esc(t('blockRunningD')), sw('blockWhileRunning'))}
       ${row(esc(t('confirmBulk')), esc(t('confirmBulkD')), sw('confirmBulk'))}
-      ${row(esc(t('liveryPrompt')), esc(t('liveryPromptD')), `<select class="inp" id="st-lp" style="width:240px">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.liveryPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('lp_' + k))}</option>`).join('')}</select>`)}
+      ${row(esc(t('liveryPrompt')), esc(t('liveryPromptD')), `<select class="w-240 inp" id="st-lp">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.liveryPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('lp_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('autoUpdate')), esc(t('autoUpdateD')), sw('autoUpdateCheck'))}
     </div>
     <div class="card set-card"><h3>${icon('eye')}${esc(t('setLook'))}</h3>
-      ${row(esc(t('theme')), '', `<select class="inp" id="st-theme" style="width:200px">${['dark', 'amoled', 'light', 'auto'].map((k) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${esc(t('theme_' + k))}</option>`).join('')}</select>`)}
-      ${row(esc(t('mapStyle')), '', `<select class="inp" id="st-map" style="width:200px">${[['dark', t('mapDark')], ['light', t('mapLight')], ['osm', 'OpenStreetMap'], ['satellite', t('mapSat')]].map(([k, l]) => `<option value="${k}" ${(s.mapStyle || 'dark') === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`)}
+      ${row(esc(t('theme')), '', `<select class="w-200 inp" id="st-theme">${['dark', 'amoled', 'light', 'auto'].map((k) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${esc(t('theme_' + k))}</option>`).join('')}</select>`)}
+      ${row(esc(t('mapStyle')), '', `<select class="w-200 inp" id="st-map">${[['dark', t('mapDark')], ['light', t('mapLight')], ['osm', 'OpenStreetMap'], ['satellite', t('mapSat')]].map(([k, l]) => `<option value="${k}" ${(s.mapStyle || 'dark') === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`)}
       ${row(esc(t('accent')), '', `<div class="accent-pick">${['sky', 'amber', 'green', 'violet', 'rose'].map((a) => `<button data-acc="${a}" class="${s.accent === a ? 'on' : ''}" style="background:${{ sky: '#5cc4ff', amber: '#ffc35a', green: '#5fe0a0', violet: '#b7a2ff', rose: '#ff95b5' }[a]}"></button>`).join('')}</div>`)}
-      ${row(esc(t('language')), '', `<select class="inp" id="st-lang" style="width:200px"><option value="pl" ${s.language === 'pl' ? 'selected' : ''}>Polski</option><option value="en" ${s.language === 'en' ? 'selected' : ''}>English</option></select>`)}
+      ${row(esc(t('language')), '', `<select class="w-200 inp" id="st-lang"><option value="pl" ${s.language === 'pl' ? 'selected' : ''}>Polski</option><option value="en" ${s.language === 'en' ? 'selected' : ''}>English</option></select>`)}
       ${row(esc(t('cardSize')), '', `<input type="range" id="st-card" min="190" max="360" step="10" value="${s.cardSize || 240}">`)}
     </div>
     <div class="card set-card"><h3>${icon('info')}${esc(t('about'))}</h3>
@@ -1698,6 +1827,7 @@ function viewSettings(v) {
     </div></div>`;
   $$('[data-swk]', v).forEach((b) => (b.onclick = () => { const k = b.dataset.swk; s[k] = !s[k]; b.classList.toggle('on', s[k]); persist(); }));
   $$('[data-open-path]', v).forEach((b) => (b.onclick = () => opener.openPath(b.dataset.openPath).catch((e) => toast(errMsg(e), 'bad'))));
+  $('#st-sb').onchange = async (e) => { s.simbriefUser = e.target.value.trim(); await saveSettings(); };
   $('#st-inst').onchange = async (e) => { s.installationId = e.target.value; s.targetCommunity = ''; await saveSettings(); await refresh(true); };
   const pathField = (id, key) => {
     $(`#${id}`).onchange = async (e) => { s[key] = e.target.value.trim(); await saveSettings(); await refresh(); };
@@ -1715,7 +1845,7 @@ function viewSettings(v) {
     const l = s.libraries.find((x) => x.id === b.dataset.rmlib);
     const st = libStats.get(l.id);
     const linked = st?.enabled || 0;
-    if (!(await confirmBox(t('remove'), `<div>${esc(t('removeLibQ', l.name))}</div>${linked ? `<div class="banner warn" style="margin:0">${icon('warn')}<div>${esc(t('removeLibLinked', linked))}</div></div>` : ''}`, t('remove')))) return;
+    if (!(await confirmBox(t('remove'), `<div>${esc(t('removeLibQ', l.name))}</div>${linked ? `<div class="m-0 banner warn">${icon('warn')}<div>${esc(t('removeLibLinked', linked))}</div></div>` : ''}`, t('remove')))) return;
     s.libraries = s.libraries.filter((x) => x.id !== l.id);
     await saveSettings(); await refresh();
   }));
@@ -1751,7 +1881,7 @@ async function onboarding(onlySuggestions = false) {
     <div class="card list">${inst ? `<div class="row">${icon('ok')}<div class="grow"><div class="t">${esc(inst.label)}</div><div class="d mono">${esc(sc.target)}</div></div></div>` : `<div class="row">${icon('warn')}<div class="grow"><div class="t">${esc(t('noSim'))}</div><div class="d">${esc(t('noSimD'))}</div></div></div>`}
       <div class="row">${icon('addons')}<div class="grow"><div class="t">${esc(t('foundInCommunity', sc?.packages.length || 0))}</div><div class="d">${esc(t('foundLinks', (sc?.packages || []).filter((p) => p.link).length))}</div></div></div></div>`}
     ${sugg.length ? `<div><b>${esc(t('suggestedLib'))}</b><div class="faint">${esc(t('suggestedLibIntro'))}</div></div>
-      <div class="card list">${sugg.map((x, i) => `<label class="row click" style="gap:10px"><input type="checkbox" data-sg="${i}" checked style="accent-color:var(--acc)"><div class="grow"><div class="t mono" style="font-size:12.5px">${esc(x.path)}</div><div class="d">${esc(t('suggestedLibD', x.links, x.packages))}</div></div></label>`).join('')}</div>` : onlySuggestions ? '' : `<div class="faint">${esc(t('noSuggestions'))}</div>`}`;
+      <div class="card list">${sugg.map((x, i) => `<label class="gap-5 row click"><input type="checkbox" data-sg="${i}" checked><div class="grow"><div class="t-sm t mono">${esc(x.path)}</div><div class="d">${esc(t('suggestedLibD', x.links, x.packages))}</div></div></label>`).join('')}</div>` : onlySuggestions ? '' : `<div class="faint">${esc(t('noSuggestions'))}</div>`}`;
   const r = await dialog({
     title: onlySuggestions ? t('suggestedLib') : t('welcome'),
     body,

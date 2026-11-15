@@ -232,7 +232,7 @@ const STYLE = `
 .rfb-row button{font:inherit;border-radius:9px;padding:8px 16px;cursor:pointer;border:1px solid var(--rfb-line);background:transparent;color:inherit}
 .rfb-row button.rfb-primary{background:var(--rfb-accent);border-color:var(--rfb-accent);color:var(--rfb-accent-fg);font-weight:600}
 .rfb-row button:disabled{opacity:.5;cursor:default}
-.rfb-foot{margin-top:12px;font-size:12px;color:var(--rfb-dim)}
+.rfb-foot{margin-top:12px;font-size:var(--fs-sm);color:var(--rfb-dim)}
 .rfb-box details{margin:4px 0 6px;min-width:0}
 .rfb-box summary{cursor:pointer;color:var(--rfb-dim)}
 .rfb-box pre{max-width:100%;max-height:180px;overflow:auto;font:11px/1.4 ui-monospace,Consolas,monospace;background:var(--rfb-field);border:1px solid var(--rfb-line);border-radius:9px;padding:8px;white-space:pre}
