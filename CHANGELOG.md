@@ -1,5 +1,10 @@
 # Zmiany
 
+## 1.5.1
+
+- Aktualizacja z poziomu aplikacji nie kończy się już błędem 740: instalator uruchamia się z oknem uprawnień administratora (UAC).
+- Instalator ma polskie napisy także na stronie ponownej instalacji i przy WebView2 (wcześniej były tam puste pola).
+
 ## 1.5.0
 
 - Plan lotu z SimBrief (opcjonalnie): w „Przygotuj lot” przycisk „Wczytaj z SimBrief” pobiera ostatni plan pilota – start, cel, lotniska zapasowe (celu, startu i na trasie) i dobiera zainstalowany samolot. Nazwę pilota albo Pilot ID ustawia się w ustawieniach.

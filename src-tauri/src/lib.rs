@@ -842,7 +842,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         return Err("Nieprawidłowy adres aktualizacji".into());
     }
     let run = update::install(&url).await?;
-    std::process::Command::new(&run).spawn().map_err(|e| format!("Uruchomienie nowej wersji: {e}"))?;
+    update::launch(&run).map_err(|e| format!("Uruchomienie nowej wersji: {e}"))?;
     app.exit(0);
     Ok(())
 }

@@ -112,6 +112,27 @@ pub async fn install(url: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// Uruchamia nową wersję. Instalator może wymagać uprawnień administratora, a zwykłe
+/// `CreateProcess` kończy się wtedy błędem 740 – `start` idzie przez ShellExecute,
+/// które pokazuje okno UAC. Nowy plik przenośny uruchamiamy bezpośrednio.
+pub fn launch(path: &Path) -> std::io::Result<()> {
+    let installer = path.file_name().map(|n| n.to_string_lossy().to_lowercase().contains("setup")).unwrap_or(false);
+    if !installer {
+        return std::process::Command::new(path).spawn().map(|_| ());
+    }
+    let mut cmd = std::process::Command::new("cmd");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Cudzysłowy dosłownie: pusty tytuł okna i ścieżka mogąca zawierać spacje.
+        cmd.raw_arg(format!("/C start \"\" \"{}\"", path.display()));
+        cmd.creation_flags(0x0800_0000);
+    }
+    #[cfg(not(windows))]
+    cmd.arg(path);
+    cmd.spawn().map(|_| ())
+}
+
 /// Usuwa kopię poprzedniej wersji przenośnej (gdy stary proces już się zamknął).
 pub fn cleanup_old() {
     let Ok(exe) = std::env::current_exe() else { return };
