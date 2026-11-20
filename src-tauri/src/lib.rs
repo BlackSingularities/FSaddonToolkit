@@ -1,5 +1,7 @@
 //! FS Addon Toolkit – komendy dla interfejsu, zadania w tle i stan aplikacji.
 
+#[macro_use]
+mod i18n;
 mod airports;
 mod bgl;
 mod engine;
@@ -82,7 +84,7 @@ impl AppState {
 
     fn guard_sim(&self, settings: &Settings) -> Result<(), String> {
         if settings.block_while_running && sim::is_running() {
-            return Err("Symulator jest uruchomiony – zmiany w dodatkach zadziałają dopiero po ponownym starcie, a przenoszenie folderów może się nie udać. Zamknij MSFS albo wyłącz blokadę w ustawieniach.".into());
+            return Err(tr!("Symulator jest uruchomiony – zmiany w dodatkach zadziałają dopiero po ponownym starcie, a przenoszenie folderów może się nie udać. Zamknij MSFS albo wyłącz blokadę w ustawieniach.", "The simulator is running – add-on changes take effect only after a restart, and moving folders may fail. Close MSFS or turn off the lock in settings."));
         }
         Ok(())
     }
@@ -109,6 +111,12 @@ fn app_info(state: St) -> AppInfo {
         data_dir: state.store.dir.to_string_lossy().into_owned(),
         airports: airports::count(),
     }
+}
+
+/// Język komunikatów backendu – interfejs wywołuje to przy starcie i po zmianie języka.
+#[tauri::command]
+fn set_language(code: String) {
+    i18n::set(&code);
 }
 
 #[tauri::command]
@@ -149,23 +157,23 @@ fn save_settings(state: St, settings: Settings) -> Result<Settings, String> {
 fn check_library(state: St, path: String) -> Result<Library, String> {
     let p = PathBuf::from(path.trim());
     if !p.is_dir() {
-        return Err("Ten folder nie istnieje".into());
+        return Err(tr!("Ten folder nie istnieje", "This folder does not exist"));
     }
     let (settings, layout) = state.layout()?;
     let n = links::norm(&p);
     for c in &layout.communities {
         let cn = links::norm(c);
         if n == cn || n.starts_with(&format!("{cn}\\")) || cn.starts_with(&format!("{n}\\")) {
-            return Err("Biblioteka nie może być folderem Community ani go zawierać – wybierz osobny folder (najlepiej na innym dysku)".into());
+            return Err(tr!("Biblioteka nie może być folderem Community ani go zawierać – wybierz osobny folder (najlepiej na innym dysku)", "A library cannot be the Community folder or contain it – pick a separate folder (ideally on another drive)"));
         }
     }
     if links::norm(&layout.parking) == n {
-        return Err("To jest folder wyłączonych pakietów – wybierz inny".into());
+        return Err(tr!("To jest folder wyłączonych pakietów – wybierz inny", "This is the disabled-packages folder – pick another one"));
     }
     for l in &settings.libraries {
         let ln = links::norm(Path::new(&l.path));
         if ln == n || n.starts_with(&format!("{ln}\\")) || ln.starts_with(&format!("{n}\\")) {
-            return Err(format!("Ten folder pokrywa się z biblioteką „{}”", l.name));
+            return Err(tr!("Ten folder pokrywa się z biblioteką „{}”", "This folder overlaps the library “{}”", l.name));
         }
     }
     Ok(Library {
@@ -239,7 +247,7 @@ fn apply(state: &AppState, enable: &[String], disable: &[String], label: &str) -
     // Najpierw wyłączanie – zwalnia nazwy w Community dla innych kopii.
     for id in disable {
         let Some(p) = find(&scan, id) else {
-            res.errors.push(err(None, id, "Pakiet zniknął z dysku".into()));
+            res.errors.push(err(None, id, tr!("Pakiet zniknął z dysku", "The package is gone from the disk")));
             continue;
         };
         match engine::disable(&layout, p, &mut journal) {
@@ -252,7 +260,7 @@ fn apply(state: &AppState, enable: &[String], disable: &[String], label: &str) -
     let scan = if disable.is_empty() { scan } else { state.rescan()? };
     for id in enable {
         let Some(p) = find(&scan, id) else {
-            res.errors.push(err(None, id, "Pakiet zniknął z dysku".into()));
+            res.errors.push(err(None, id, tr!("Pakiet zniknął z dysku", "The package is gone from the disk")));
             continue;
         };
         match engine::enable(&layout, &scan.packages, p, &mut journal) {
@@ -270,7 +278,7 @@ fn apply(state: &AppState, enable: &[String], disable: &[String], label: &str) -
 async fn set_enabled(app: AppHandle, ids: Vec<String>, enabled: bool, label: Option<String>) -> Result<OpResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let label = label.unwrap_or_else(|| if enabled { "Włączenie".into() } else { "Wyłączenie".into() });
+        let label = label.unwrap_or_else(|| if enabled { tr!("Włączenie", "Enable") } else { tr!("Wyłączenie", "Disable") });
         if enabled { apply(&state, &ids, &[], &label) } else { apply(&state, &[], &ids, &label) }
     })
     .await
@@ -356,16 +364,16 @@ fn save_profiles(state: St, profiles: Vec<Profile>) -> Result<Vec<Profile>, Stri
 
 #[tauri::command]
 fn write_text(path: String, text: String) -> Result<(), String> {
-    std::fs::write(&path, text).map_err(|e| format!("Zapis pliku: {e}"))
+    std::fs::write(&path, text).map_err(|e| tr!("Zapis pliku: {e}", "Writing the file: {e}"))
 }
 
 #[tauri::command]
 fn read_text(path: String) -> Result<String, String> {
     let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
     if meta.len() > 20 * 1024 * 1024 {
-        return Err("Plik jest za duży".into());
+        return Err(tr!("Plik jest za duży", "The file is too large"));
     }
-    std::fs::read_to_string(&path).map_err(|e| format!("Odczyt pliku: {e}"))
+    std::fs::read_to_string(&path).map_err(|e| tr!("Odczyt pliku: {e}", "Reading the file: {e}"))
 }
 
 // ───────────────────────────── Miniatury ─────────────────────────────
@@ -387,9 +395,9 @@ async fn thumb(app: AppHandle, path: String) -> Result<String, String> {
             return Ok(out.to_string_lossy().into_owned());
         }
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let img = image::open(&src).map_err(|e| format!("Miniatura: {e}"))?;
+        let img = image::open(&src).map_err(|e| tr!("Miniatura: {e}", "Thumbnail: {e}"))?;
         let small = if img.width() > 560 { img.thumbnail(560, 560 * img.height() / img.width().max(1)) } else { img };
-        small.to_rgb8().save_with_format(&out, image::ImageFormat::Jpeg).map_err(|e| format!("Miniatura: {e}"))?;
+        small.to_rgb8().save_with_format(&out, image::ImageFormat::Jpeg).map_err(|e| tr!("Miniatura: {e}", "Thumbnail: {e}"))?;
         Ok(out.to_string_lossy().into_owned())
     })
     .await
@@ -409,7 +417,7 @@ struct Details {
 #[tauri::command]
 fn package_details(state: St, id: String) -> Result<Details, String> {
     let scan = state.current()?;
-    let p = find(&scan, &id).ok_or("Nie ma takiego pakietu")?;
+    let p = find(&scan, &id).ok_or_else(|| tr!("Nie ma takiego pakietu", "No such package"))?;
     let raw = std::fs::read_to_string(Path::new(&p.path).join("manifest.json")).unwrap_or_default();
     let v: serde_json::Value = serde_json::from_str(raw.trim_start_matches('\u{feff}')).unwrap_or_default();
     let mut notes = String::new();
@@ -437,7 +445,7 @@ async fn generate_layout(app: AppHandle, id: String) -> Result<usize, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let scan = state.current()?;
-        let p = find(&scan, &id).ok_or("Nie ma takiego pakietu")?;
+        let p = find(&scan, &id).ok_or_else(|| tr!("Nie ma takiego pakietu", "No such package"))?;
         let n = package::generate_layout(Path::new(&p.path))?;
         state.rescan()?;
         Ok(n)
@@ -465,7 +473,7 @@ async fn trash_packages(app: AppHandle, ids: Vec<String>) -> Result<OpResult, St
             }
             match trash::delete(&p.path) {
                 Ok(()) => res.changed += 1,
-                Err(e) => res.errors.push(OpError { id: id.clone(), title: p.info.title.clone(), message: format!("Kosz: {e}") }),
+                Err(e) => res.errors.push(OpError { id: id.clone(), title: p.info.title.clone(), message: tr!("Kosz: {e}", "Recycle Bin: {e}") }),
             }
         }
         state.rescan()?;
@@ -523,8 +531,8 @@ fn relocate(app: AppHandle, ids: Vec<String>, library_id: String) -> Result<Stri
     let state = app.state::<AppState>();
     let (settings, _) = state.layout()?;
     state.guard_sim(&settings)?;
-    let lib = settings.libraries.iter().find(|l| l.id == library_id).cloned().ok_or("Nie ma takiej biblioteki")?;
-    let mut job = Job::new(&app, &format!("Przenoszenie do „{}”", lib.name), ids.len());
+    let lib = settings.libraries.iter().find(|l| l.id == library_id).cloned().ok_or_else(|| tr!("Nie ma takiej biblioteki", "No such library"))?;
+    let mut job = Job::new(&app, &tr!("Przenoszenie do „{}”", "Moving to “{}”", lib.name), ids.len());
     let id = job.ev.id.clone();
     std::thread::spawn(move || {
         let app = job.app.clone();
@@ -566,8 +574,8 @@ fn relocate(app: AppHandle, ids: Vec<String>, library_id: String) -> Result<Stri
 fn install_addons(app: AppHandle, paths: Vec<String>, library_id: String, enable: bool, replace: bool) -> Result<String, String> {
     let state = app.state::<AppState>();
     let settings = state.settings();
-    let lib = settings.libraries.iter().find(|l| l.id == library_id).cloned().ok_or("Najpierw dodaj bibliotekę dodatków w ustawieniach")?;
-    let mut job = Job::new(&app, &format!("Instalacja do „{}”", lib.name), paths.len());
+    let lib = settings.libraries.iter().find(|l| l.id == library_id).cloned().ok_or_else(|| tr!("Najpierw dodaj bibliotekę dodatków w ustawieniach", "Add an add-on library in settings first"))?;
+    let mut job = Job::new(&app, &tr!("Instalacja do „{}”", "Installing to “{}”", lib.name), paths.len());
     let id = job.ev.id.clone();
     std::thread::spawn(move || {
         let app = job.app.clone();
@@ -593,7 +601,7 @@ fn install_addons(app: AppHandle, paths: Vec<String>, library_id: String, enable
                 } else if install::is_archive(&p) {
                     install::install_archive(&p, &root, replace, &mut errors, &mut tick)
                 } else {
-                    errors.push(format!("{}: obsługiwane są foldery oraz archiwa ZIP, RAR i 7z", p.display()));
+                    errors.push(tr!("{}: obsługiwane są foldery oraz archiwa ZIP, RAR i 7z", "{}: only folders and ZIP, RAR and 7z archives are supported", p.display()));
                     vec![]
                 };
                 job.ev.changed += got.len();
@@ -649,7 +657,7 @@ async fn fix_issue(app: AppHandle, fix: String, packages: Vec<String>, paths: Ve
                 for p in &paths {
                     links::remove(Path::new(p))?;
                 }
-                format!("Usunięto łącza: {}", paths.len())
+                tr!("Usunięto łącza: {}", "Links removed: {}", paths.len())
             }
             "flatten" => {
                 state.guard_sim(&settings)?;
@@ -660,20 +668,20 @@ async fn fix_issue(app: AppHandle, fix: String, packages: Vec<String>, paths: Ve
                     let community = wrapper.parent().map(Path::to_path_buf).unwrap_or(layout.target.clone());
                     n += install::flatten(&wrapper, &community)?;
                 }
-                format!("Wyciągnięto pakiety: {n}")
+                tr!("Wyciągnięto pakiety: {n}", "Packages pulled out: {n}")
             }
             "trash" => {
                 for p in &paths {
                     if links::is_link(Path::new(p)) {
-                        return Err("To jest łącze – użyj „Usuń łącze”".into());
+                        return Err(tr!("To jest łącze – użyj „Usuń łącze”", "This is a link – use “Remove link”"));
                     }
-                    trash::delete(p).map_err(|e| format!("Kosz: {e}"))?;
+                    trash::delete(p).map_err(|e| tr!("Kosz: {e}", "Recycle Bin: {e}"))?;
                 }
-                "Przeniesiono do kosza".into()
+                tr!("Przeniesiono do kosza", "Moved to the Recycle Bin")
             }
             "enable" => {
-                let r = apply(&state, &packages[..1.min(packages.len())], &[], "Włączenie zależności")?;
-                r.errors.first().map(|e| e.message.clone()).map(Err).unwrap_or(Ok("Włączono zależność".to_string()))?
+                let r = apply(&state, &packages[..1.min(packages.len())], &[], &tr!("Włączenie zależności", "Enable dependency"))?;
+                r.errors.first().map(|e| e.message.clone()).map(Err).unwrap_or(Ok(tr!("Włączono zależność", "Dependency enabled")))?
             }
             "layout" => {
                 let scan = state.current()?;
@@ -684,7 +692,7 @@ async fn fix_issue(app: AppHandle, fix: String, packages: Vec<String>, paths: Ve
                         n += 1;
                     }
                 }
-                format!("Odtworzono layout.json: {n}")
+                tr!("Odtworzono layout.json: {n}", "layout.json regenerated: {n}")
             }
             "disable-copies" => {
                 // Zostaje kopia z biblioteki (albo pierwsza), pozostałe wyłączamy.
@@ -692,10 +700,10 @@ async fn fix_issue(app: AppHandle, fix: String, packages: Vec<String>, paths: Ve
                 let mut copies: Vec<&Pkg> = packages.iter().filter_map(|id| find(&scan, id)).filter(|p| p.enabled).collect();
                 copies.sort_by_key(|p| (p.source != "library", p.source != "community"));
                 let off: Vec<String> = copies.iter().skip(1).map(|p| p.id.clone()).collect();
-                let r = apply(&state, &[], &off, "Usunięcie duplikatów")?;
-                format!("Wyłączono kopie: {}", r.changed)
+                let r = apply(&state, &[], &off, &tr!("Usunięcie duplikatów", "Remove duplicates"))?;
+                tr!("Wyłączono kopie: {}", "Copies disabled: {}", r.changed)
             }
-            _ => return Err("Nieznana naprawa".into()),
+            _ => return Err(tr!("Nieznana naprawa", "Unknown fix")),
         };
         state.rescan()?;
         Ok(msg)
@@ -711,8 +719,8 @@ async fn official_list(app: AppHandle) -> Result<official::OfficialList, String>
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let settings = state.settings();
-        let inst = state.installation(&settings).ok_or("Nie wykryto instalacji MSFS")?;
-        let path = inst.content_xml.clone().ok_or("Nie znaleziono pliku Content.xml – uruchom symulator przynajmniej raz")?;
+        let inst = state.installation(&settings).ok_or_else(|| tr!("Nie wykryto instalacji MSFS", "No MSFS installation detected"))?;
+        let path = inst.content_xml.clone().ok_or_else(|| tr!("Nie znaleziono pliku Content.xml – uruchom symulator przynajmniej raz", "Content.xml not found – start the simulator at least once"))?;
         let streamed = PathBuf::from(&inst.packages_path).join("StreamedPackages");
         official::list(Path::new(&path), &inst.official_dirs, Some(&streamed))
     })
@@ -724,10 +732,10 @@ async fn official_list(app: AppHandle) -> Result<official::OfficialList, String>
 fn official_set(state: St, changes: HashMap<String, bool>, label: Option<String>) -> Result<usize, String> {
     let settings = state.settings();
     state.guard_sim(&settings)?;
-    let inst = state.installation(&settings).ok_or("Nie wykryto instalacji MSFS")?;
-    let path = inst.content_xml.ok_or("Nie znaleziono pliku Content.xml")?;
+    let inst = state.installation(&settings).ok_or_else(|| tr!("Nie wykryto instalacji MSFS", "No MSFS installation detected"))?;
+    let path = inst.content_xml.ok_or_else(|| tr!("Nie znaleziono pliku Content.xml", "Content.xml not found"))?;
     let done = official::set(Path::new(&path), &changes, &state.store.dir.join("content-backups"))?;
-    let mut journal = Journal::new(&label.unwrap_or_else(|| "Pakiety oficjalne".into()));
+    let mut journal = Journal::new(&label.unwrap_or_else(|| tr!("Pakiety oficjalne", "Official packages")));
     for (name, from, to) in &done {
         journal.push(name, Op::Official { name: name.clone(), from: from.clone(), to: to.clone() });
     }
@@ -738,7 +746,7 @@ fn official_set(state: St, changes: HashMap<String, bool>, label: Option<String>
 #[tauri::command]
 fn official_readonly(state: St, readonly: bool) -> Result<(), String> {
     let settings = state.settings();
-    let path = state.installation(&settings).and_then(|i| i.content_xml).ok_or("Nie znaleziono pliku Content.xml")?;
+    let path = state.installation(&settings).and_then(|i| i.content_xml).ok_or_else(|| tr!("Nie znaleziono pliku Content.xml", "Content.xml not found"))?;
     official::set_readonly(Path::new(&path), readonly)
 }
 
@@ -751,7 +759,7 @@ fn official_backups(state: St) -> Vec<String> {
 fn official_restore(state: St, backup: String) -> Result<(), String> {
     let settings = state.settings();
     state.guard_sim(&settings)?;
-    let path = state.installation(&settings).and_then(|i| i.content_xml).ok_or("Nie znaleziono pliku Content.xml")?;
+    let path = state.installation(&settings).and_then(|i| i.content_xml).ok_or_else(|| tr!("Nie znaleziono pliku Content.xml", "Content.xml not found"))?;
     official::restore(Path::new(&path), Path::new(&backup), &state.store.dir.join("content-backups"))
 }
 
@@ -772,7 +780,7 @@ async fn sim_status() -> SimStatus {
 #[tauri::command]
 fn launch_sim(state: St) -> Result<(), String> {
     let settings = state.settings();
-    let inst = state.installation(&settings).ok_or("Nie wykryto instalacji MSFS")?;
+    let inst = state.installation(&settings).ok_or_else(|| tr!("Nie wykryto instalacji MSFS", "No MSFS installation detected"))?;
     sim::launch(&inst.launch_uri)
 }
 
@@ -813,9 +821,9 @@ async fn check_update() -> Result<UpdateInfo, String> {
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .map_err(|e| e.to_string())?;
-    let r = client.get(UPDATE_FEED).send().await.map_err(|e| format!("Brak połączenia z redzikowski.com: {e}"))?;
+    let r = client.get(UPDATE_FEED).send().await.map_err(|e| tr!("Brak połączenia z redzikowski.com: {e}", "Cannot connect to redzikowski.com: {e}"))?;
     if !r.status().is_success() {
-        return Err(format!("Serwer aktualizacji odpowiedział kodem {}", r.status()));
+        return Err(tr!("Serwer aktualizacji odpowiedział kodem {}", "The update server responded with code {}", r.status()));
     }
     let v: serde_json::Value = r.json().await.map_err(|e| e.to_string())?;
     let tag = v.get("tag_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
@@ -839,10 +847,10 @@ async fn check_update() -> Result<UpdateInfo, String> {
 #[tauri::command]
 async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     if !url.starts_with(UPDATE_ASSETS) {
-        return Err("Nieprawidłowy adres aktualizacji".into());
+        return Err(tr!("Nieprawidłowy adres aktualizacji", "Invalid update address"));
     }
     let run = update::install(&url).await?;
-    update::launch(&run).map_err(|e| format!("Uruchomienie nowej wersji: {e}"))?;
+    update::launch(&run).map_err(|e| tr!("Uruchomienie nowej wersji: {e}", "Starting the new version: {e}"))?;
     app.exit(0);
     Ok(())
 }
@@ -873,12 +881,17 @@ pub fn run() {
                 installs: Mutex::new(sim::detect()),
                 ops: Mutex::new(()),
             });
+            let s = app.state::<AppState>().settings();
+            if s.language_picked && !s.language.is_empty() {
+                i18n::set(&s.language);
+            }
             update::cleanup_old();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
             get_settings,
+            set_language,
             save_settings,
             check_library,
             installations,

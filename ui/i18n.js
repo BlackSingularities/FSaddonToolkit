@@ -250,3 +250,22 @@ export function t(key, ...args) {
   const s = current[key] ?? PL[key] ?? key;
   return args.length ? s.replace(/\{(\d)\}/g, (_, i) => args[+i] ?? '') : s;
 }
+
+// Etykiety historii są zapisywane na dysku w języku z chwili operacji. Znane polskie etykiety
+// (z interfejsu i z backendu) pokazujemy w bieżącym języku – reszta (np. nazwy profili) zostaje bez zmian.
+const LABEL_KEYS = ['lblEnable', 'lblDisable', 'lblBulkEnable', 'lblBulkDisable', 'lblMapArea', 'lblMapSel', 'lblFlight', 'lightMode'];
+const BACKEND_LABELS = [
+  ['Włączenie zależności', 'Enable dependency'], ['Usunięcie duplikatów', 'Remove duplicates'], ['Pakiety oficjalne', 'Official packages'],
+  ['Przenoszenie do „', 'Moving to “'], ['Instalacja do „', 'Installing to “'],
+];
+export function historyLabel(s) {
+  if (!s || code === 'pl') return s;
+  for (const [pl, en] of BACKEND_LABELS) {
+    if (s.startsWith(pl)) return en + s.slice(pl.length);
+  }
+  for (const k of [...LABEL_KEYS].sort((a, b) => PL[b].length - PL[a].length)) {
+    if (s === PL[k] || s.startsWith(PL[k] + ' ')) return EN[k] + s.slice(PL[k].length);
+  }
+  if (s.startsWith(PL.profile + ': ')) return EN.profile + s.slice(PL.profile.length);
+  return s;
+}

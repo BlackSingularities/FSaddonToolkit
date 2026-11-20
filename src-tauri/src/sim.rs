@@ -189,13 +189,13 @@ pub fn disks() -> Vec<Disk> {
 
 pub fn launch(uri: &str) -> Result<(), String> {
     if !(uri.starts_with("steam://rungameid/") || uri.starts_with("shell:AppsFolder\\")) {
-        return Err("Nieznany sposób uruchomienia symulatora".into());
+        return Err(tr!("Nieznany sposób uruchomienia symulatora", "Unknown way to launch the simulator"));
     }
     std::process::Command::new("explorer.exe")
         .arg(uri)
         .spawn()
         .map(|_| ())
-        .map_err(|e| format!("Nie udało się uruchomić symulatora: {e}"))
+        .map_err(|e| tr!("Nie udało się uruchomić symulatora: {e}", "Could not launch the simulator: {e}"))
 }
 
 #[cfg(test)]

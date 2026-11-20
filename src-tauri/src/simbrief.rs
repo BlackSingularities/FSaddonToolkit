@@ -95,7 +95,7 @@ pub fn parse(json: &Value) -> Result<Ofp, String> {
         push(airport(v, "era"));
     }
     if !list.iter().any(|a| a.role == "dep") {
-        return Err("Plan SimBrief nie ma lotniska startu".into());
+        return Err(tr!("Plan SimBrief nie ma lotniska startu", "The SimBrief plan has no departure airport"));
     }
     let ac = json.get("aircraft").unwrap_or(&Value::Null);
     let general = json.get("general").unwrap_or(&Value::Null);
@@ -114,7 +114,7 @@ pub fn parse(json: &Value) -> Result<Ofp, String> {
 pub async fn fetch(user: &str) -> Result<Ofp, String> {
     let user = user.trim();
     if user.is_empty() {
-        return Err("Podaj nazwę pilota albo Pilot ID SimBrief".into());
+        return Err(tr!("Podaj nazwę pilota albo Pilot ID SimBrief", "Enter a SimBrief username or Pilot ID"));
     }
     let key = if user.chars().all(|c| c.is_ascii_digit()) { "userid" } else { "username" };
     let url = format!("https://www.simbrief.com/api/xml.fetcher.php?{key}={}&json=v2", urlencoding::encode(user));
@@ -126,7 +126,7 @@ pub async fn fetch(user: &str) -> Result<Ofp, String> {
         .map_err(|e| e.to_string())?;
     let r = client.get(&url).send().await.map_err(|e| format!("SimBrief: {e}"))?;
     if r.status().as_u16() == 400 {
-        return Err("SimBrief nie zna tego pilota albo nie ma on jeszcze żadnego planu".into());
+        return Err(tr!("SimBrief nie zna tego pilota albo nie ma on jeszcze żadnego planu", "SimBrief does not know this pilot, or they have no plan yet"));
     }
     if !r.status().is_success() {
         return Err(format!("SimBrief: HTTP {}", r.status()));

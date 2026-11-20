@@ -110,14 +110,14 @@ impl Layout {
         } else if let Some(i) = inst {
             i.communities.iter().map(PathBuf::from).collect()
         } else {
-            return Err("Nie znaleziono instalacji Microsoft Flight Simulator. Wskaż folder Community w ustawieniach.".into());
+            return Err(tr!("Nie znaleziono instalacji Microsoft Flight Simulator. Wskaż folder Community w ustawieniach.", "Microsoft Flight Simulator installation not found. Point to the Community folder in settings."));
         };
         let target = communities
             .iter()
             .find(|c| !settings.target_community.is_empty() && links::norm(c) == links::norm(Path::new(&settings.target_community)))
             .or(communities.first())
             .cloned()
-            .ok_or("Brak folderu Community")?;
+            .ok_or_else(|| tr!("Brak folderu Community", "Community folder missing"))?;
         let parking = if settings.parking.trim().is_empty() {
             target.parent().map(|p| p.join("Community (wyłączone)")).unwrap_or_else(|| target.join("..").join("Community (wyłączone)"))
         } else {
@@ -372,18 +372,18 @@ impl Journal {
 
 fn rename(from: &Path, to: &Path) -> Result<(), String> {
     if to.exists() {
-        return Err(format!("Cel już istnieje: {}", to.display()));
+        return Err(tr!("Cel już istnieje: {}", "Target already exists: {}", to.display()));
     }
     if let Some(parent) = to.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Nie można utworzyć {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| tr!("Nie można utworzyć {}: {e}", "Cannot create {}: {e}", parent.display()))?;
     }
     std::fs::rename(from, to).map_err(|e| {
         if e.raw_os_error() == Some(17) {
-            format!("Foldery są na różnych dyskach – użyj „Przenieś do biblioteki”: {e}")
+            tr!("Foldery są na różnych dyskach – użyj „Przenieś do biblioteki”: {e}", "The folders are on different drives – use “Move to library”: {e}")
         } else if e.raw_os_error() == Some(5) || e.raw_os_error() == Some(32) {
-            format!("Folder jest zablokowany (otwarty w symulatorze lub innym programie): {e}")
+            tr!("Folder jest zablokowany (otwarty w symulatorze lub innym programie): {e}", "The folder is locked (open in the simulator or another program): {e}")
         } else {
-            format!("Nie udało się przenieść folderu: {e}")
+            tr!("Nie udało się przenieść folderu: {e}", "Could not move the folder: {e}")
         }
     })
 }
@@ -393,7 +393,7 @@ pub fn enable(layout: &Layout, all: &[Pkg], p: &Pkg, journal: &mut Journal) -> R
         return Ok(false);
     }
     if let Some(other) = all.iter().find(|o| o.enabled && o.key == p.key && o.id != p.id) {
-        return Err(format!("Włączona jest już inna kopia tego pakietu: {}", other.path));
+        return Err(tr!("Włączona jest już inna kopia tego pakietu: {}", "Another copy of this package is already enabled: {}", other.path));
     }
     let src = PathBuf::from(&p.path);
     let dest = layout.target.join(&p.folder);
@@ -435,9 +435,9 @@ pub fn undo(op: &Op, mode: Mode) -> Result<(), String> {
             let l = Path::new(link);
             match links::target(l) {
                 Some(t) if links::norm(&t) == links::norm(Path::new(target)) => links::remove(l),
-                Some(_) => Err("Łącze wskazuje już gdzie indziej".into()),
+                Some(_) => Err(tr!("Łącze wskazuje już gdzie indziej", "The link already points somewhere else")),
                 None if !l.exists() => Ok(()),
-                None => Err("W miejscu łącza jest teraz zwykły folder".into()),
+                None => Err(tr!("W miejscu łącza jest teraz zwykły folder", "There is now a regular folder where the link was")),
             }
         }
         Op::Unlink { link, target } => {
@@ -465,9 +465,9 @@ pub fn undo(op: &Op, mode: Mode) -> Result<(), String> {
 /// Usuwa zwykły folder z zawartością. Odmawia dla łączy – te usuwa `links::remove`.
 pub fn remove_real_dir(path: &Path) -> Result<(), String> {
     if links::is_link(path) {
-        return Err("Ścieżka jest łączem – nie usuwam zawartości celu".into());
+        return Err(tr!("Ścieżka jest łączem – nie usuwam zawartości celu", "The path is a link – not deleting the target’s contents"));
     }
-    std::fs::remove_dir_all(path).map_err(|e| format!("Nie udało się usunąć {}: {e}", path.display()))
+    std::fs::remove_dir_all(path).map_err(|e| tr!("Nie udało się usunąć {}: {e}", "Could not delete {}: {e}", path.display()))
 }
 
 /// Kopiuje folder z postępem (`done`, `total` w bajtach). Łącza wewnątrz pakietu są pomijane.
@@ -475,7 +475,7 @@ pub fn copy_dir(from: &Path, to: &Path, progress: &mut dyn FnMut(u64, u64)) -> R
     let files: Vec<walkdir::DirEntry> = walkdir::WalkDir::new(from).follow_links(false).into_iter().filter_map(Result::ok).collect();
     let total: u64 = files.iter().filter(|e| e.file_type().is_file()).filter_map(|e| e.metadata().ok()).map(|m| m.len()).sum();
     if to.exists() {
-        return Err(format!("Cel już istnieje: {}", to.display()));
+        return Err(tr!("Cel już istnieje: {}", "Target already exists: {}", to.display()));
     }
     let mut done = 0u64;
     let mut last = 0u64;
@@ -483,12 +483,12 @@ pub fn copy_dir(from: &Path, to: &Path, progress: &mut dyn FnMut(u64, u64)) -> R
         let rel = e.path().strip_prefix(from).map_err(|e| e.to_string())?;
         let dest = to.join(rel);
         if e.file_type().is_dir() {
-            std::fs::create_dir_all(&dest).map_err(|e| format!("Tworzenie {}: {e}", dest.display()))?;
+            std::fs::create_dir_all(&dest).map_err(|e| tr!("Tworzenie {}: {e}", "Creating {}: {e}", dest.display()))?;
         } else if e.file_type().is_file() {
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
-            done += std::fs::copy(e.path(), &dest).map_err(|e| format!("Kopiowanie {}: {e}", rel.display()))?;
+            done += std::fs::copy(e.path(), &dest).map_err(|e| tr!("Kopiowanie {}: {e}", "Copying {}: {e}", rel.display()))?;
             if done - last > total / 200 + 1 {
                 last = done;
                 progress(done, total);
@@ -504,14 +504,14 @@ pub fn relocate(layout: &Layout, p: &Pkg, lib: &Library, journal: &mut Journal, 
     let src = PathBuf::from(&p.path);
     let root = PathBuf::from(&lib.path);
     if !root.is_dir() {
-        return Err(format!("Biblioteka nie istnieje: {}", lib.path));
+        return Err(tr!("Biblioteka nie istnieje: {}", "Library does not exist: {}", lib.path));
     }
     let dest = root.join(&p.folder);
     if links::norm(&dest) == links::norm(&src) {
         return Ok(());
     }
     if dest.exists() {
-        return Err(format!("W bibliotece jest już folder „{}”", p.folder));
+        return Err(tr!("W bibliotece jest już folder „{}”", "The library already has a folder “{}”", p.folder));
     }
     // Najpierw zdejmujemy łącze, żeby symulator nie widział folderu w połowie kopiowania.
     if !p.link.is_empty() {

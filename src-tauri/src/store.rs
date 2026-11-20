@@ -184,10 +184,10 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-    std::fs::write(&tmp, data).map_err(|e| format!("Zapis {}: {e}", path.display()))?;
+    std::fs::write(&tmp, data).map_err(|e| tr!("Zapis {}: {e}", "Writing {}: {e}", path.display()))?;
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
-        format!("Zapis {}: {e}", path.display())
+        tr!("Zapis {}: {e}", "Writing {}: {e}", path.display())
     })
 }
 

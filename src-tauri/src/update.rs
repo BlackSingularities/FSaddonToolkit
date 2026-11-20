@@ -42,14 +42,14 @@ async fn download(url: &str, magic: &[u8]) -> Result<Vec<u8>, String> {
         .timeout(Duration::from_secs(600))
         .build()
         .map_err(|e| e.to_string())?;
-    let r = client.get(url).send().await.map_err(|e| format!("Pobieranie aktualizacji: {e}"))?;
+    let r = client.get(url).send().await.map_err(|e| tr!("Pobieranie aktualizacji: {e}", "Downloading the update: {e}"))?;
     if !r.status().is_success() {
-        return Err(format!("Pobieranie aktualizacji: HTTP {}", r.status()));
+        return Err(tr!("Pobieranie aktualizacji: HTTP {}", "Downloading the update: HTTP {}", r.status()));
     }
-    let b = r.bytes().await.map_err(|e| format!("Pobieranie aktualizacji: {e}"))?;
+    let b = r.bytes().await.map_err(|e| tr!("Pobieranie aktualizacji: {e}", "Downloading the update: {e}"))?;
     // Plik wykonywalny Windows zaczyna się od „MZ”.
     if b.len() < 1_000_000 || !b.starts_with(magic) {
-        return Err("Pobrany plik aktualizacji jest uszkodzony".into());
+        return Err(tr!("Pobrany plik aktualizacji jest uszkodzony", "The downloaded update file is damaged"));
     }
     Ok(b.to_vec())
 }
@@ -66,9 +66,9 @@ const OLD_EXT: &str = "exe.old";
 /// Podmienia uruchomiony plik wersji przenośnej na nowy i zwraca ścieżkę do uruchomienia.
 /// Windows pozwala zmienić nazwę działającego programu, więc stary plik odkładamy na bok.
 fn replace_portable(exe: &Path, data: &[u8], new_name: Option<String>) -> Result<PathBuf, String> {
-    let dir = exe.parent().ok_or("Nieznany folder programu")?;
+    let dir = exe.parent().ok_or_else(|| tr!("Nieznany folder programu", "Unknown program folder"))?;
     let tmp = dir.join("FSAddonToolkit.update.tmp");
-    std::fs::write(&tmp, data).map_err(|e| format!("Brak zapisu w folderze programu ({}): {e}", dir.display()))?;
+    std::fs::write(&tmp, data).map_err(|e| tr!("Brak zapisu w folderze programu ({}): {e}", "Cannot write to the program folder ({}): {e}", dir.display()))?;
     // Nazwa z numerem wersji („FSAddonToolkit_1.0.9_portable.exe”) – zmieniamy na nową; inna nazwa zostaje.
     let cur_name = exe.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let lower = cur_name.to_lowercase();
@@ -81,7 +81,7 @@ fn replace_portable(exe: &Path, data: &[u8], new_name: Option<String>) -> Result
     let _ = std::fs::remove_file(&backup);
     if let Err(e) = std::fs::rename(exe, &backup) {
         let _ = std::fs::remove_file(&tmp);
-        return Err(format!("Nie można podmienić programu: {e}"));
+        return Err(tr!("Nie można podmienić programu: {e}", "Cannot replace the program: {e}"));
     }
     if target != exe && target.exists() {
         let _ = std::fs::remove_file(&target);
@@ -89,7 +89,7 @@ fn replace_portable(exe: &Path, data: &[u8], new_name: Option<String>) -> Result
     if let Err(e) = std::fs::rename(&tmp, &target) {
         let _ = std::fs::rename(&backup, exe);
         let _ = std::fs::remove_file(&tmp);
-        return Err(format!("Nie można podmienić programu: {e}"));
+        return Err(tr!("Nie można podmienić programu: {e}", "Cannot replace the program: {e}"));
     }
     Ok(target)
 }
@@ -99,7 +99,7 @@ fn replace_portable(exe: &Path, data: &[u8], new_name: Option<String>) -> Result
 pub async fn install(url: &str) -> Result<PathBuf, String> {
     let kind = install_kind();
     if kind != "portable" && kind != "installed" {
-        return Err("Automatyczna aktualizacja nie jest dostępna na tym systemie".into());
+        return Err(tr!("Automatyczna aktualizacja nie jest dostępna na tym systemie", "Automatic update is not available on this system"));
     }
     let data = download(url, b"MZ").await?;
     let name = file_name_of(url);
@@ -108,7 +108,7 @@ pub async fn install(url: &str) -> Result<PathBuf, String> {
         return replace_portable(&exe, &data, name);
     }
     let path = std::env::temp_dir().join(name.unwrap_or_else(|| "FSAddonToolkit-setup.exe".into()));
-    std::fs::write(&path, &data).map_err(|e| format!("Zapis instalatora: {e}"))?;
+    std::fs::write(&path, &data).map_err(|e| tr!("Zapis instalatora: {e}", "Writing the installer: {e}"))?;
     Ok(path)
 }
 

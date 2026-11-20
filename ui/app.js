@@ -1,6 +1,6 @@
 // FS Addon Toolkit – interfejs
 import { icon } from './icons.js';
-import { t, setLang, lang } from './i18n.js';
+import { t, setLang, lang, historyLabel } from './i18n.js';
 import { initFeedback, openFeedback } from './feedback.js';
 
 const T = window.__TAURI__;
@@ -461,7 +461,7 @@ async function renderActivity() {
   }
   el.innerHTML = batches.length ? batches.slice(0, 6).map((b) => `<div class="row click" data-go="history">
     <span class="sev ${b.undone ? '' : 'acc'}">${icon(b.undone ? 'undo' : 'history')}</span>
-    <div class="grow"><div class="t">${esc(b.label)}</div><div class="d">${esc(fmtTime(b.at))} · ${b.n} ${esc(plural(b.n, t('op1'), t('op2'), t('op5')))}</div></div></div>`).join('')
+    <div class="grow"><div class="t">${esc(historyLabel(b.label))}</div><div class="d">${esc(fmtTime(b.at))} · ${b.n} ${esc(plural(b.n, t('op1'), t('op2'), t('op5')))}</div></div></div>`).join('')
     : `<div class="row"><div class="grow d">${esc(t('noHistory'))}</div></div>`;
   $$('[data-go]', el).forEach((r) => (r.onclick = () => go('history')));
 }
@@ -1758,7 +1758,7 @@ async function viewHistory(v) {
   }
   const opIcon = (k) => ({ link: 'link', unlink: 'unlink', move: 'move', official: 'official' }[k] || 'info');
   v.innerHTML = batches.length ? `<div class="card list">${batches.slice(0, 300).map((b) => `<div class="batch ${b.undone ? 'undone' : ''}">
-    <div class="head"><div class="grow"><div class="strong t">${esc(b.label)}</div><div class="t-sm faint">${esc(fmtTime(b.at))} · ${b.items.length} ${esc(plural(b.items.length, t('op1'), t('op2'), t('op5')))}</div></div>
+    <div class="head"><div class="grow"><div class="strong t">${esc(historyLabel(b.label))}</div><div class="t-sm faint">${esc(fmtTime(b.at))} · ${b.items.length} ${esc(plural(b.items.length, t('op1'), t('op2'), t('op5')))}</div></div>
     ${b.undone ? `<span class="tag">${esc(t('undoneTag'))}</span>` : `<button class="btn sm" data-undo="${b.batch}">${icon('undo')}${esc(t('undo'))}</button>`}</div>
     <div class="items">${b.items.slice(0, 24).map((e) => `<span class="tag" title="${esc(JSON.stringify(e.op))}">${icon(opIcon(e.op.kind))}${esc(e.title)}</span>`).join('')}${b.items.length > 24 ? `<span class="tag">+${b.items.length - 24}</span>` : ''}</div></div>`).join('')}</div>`
     : `<div class="empty">${icon('history')}<h3>${esc(t('noHistory'))}</h3><div>${esc(t('noHistoryHint'))}</div></div>`;
@@ -1854,7 +1854,9 @@ function viewSettings(v) {
   $('#st-map').onchange = (e) => { s.mapStyle = e.target.value; persist(); };
   $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));
-  $('#st-lang').onchange = (e) => { s.language = e.target.value; s.languagePicked = true; setLang(s.language); persist(); renderRail(); renderView(); };
+  $('#st-lang').onchange = (e) => { s.language = e.target.value; s.languagePicked = true; setLang(s.language); persist(); renderRail(); renderView();
+    // Kondycja przychodzi z backendu jako gotowy tekst – po zmianie języka trzeba ją pobrać na nowo.
+    invoke('set_language', { code: s.language }).then(() => { S.issues = null; loadIssues(); }).catch(() => {}); };
   $('#st-card').oninput = (e) => { s.cardSize = +e.target.value; applyTheme(); persist(); };
   $('#st-upd').onclick = () => checkUpdate(false);
   $('#st-site').onclick = (e) => { e.preventDefault(); opener.openUrl('https://redzikowski.com'); };
@@ -1962,6 +1964,8 @@ window.addEventListener('focus', debounce(async () => {
     S.settings.language = sys.startsWith('pl') ? 'pl' : 'en';
   }
   setLang(S.settings.language);
+  // Backend też musi znać język – kondycja, błędy i wyniki napraw przychodzą z niego jako gotowy tekst.
+  await invoke('set_language', { code: S.settings.language }).catch(() => {});
   S.f.sort = S.settings.sort || 'title';
   applyTheme();
   renderRail();

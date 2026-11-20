@@ -109,7 +109,7 @@ fn manifest_fields(dir: &Path) -> (String, String) {
 }
 
 pub fn list(path: &Path, official_dirs: &[String], streamed: Option<&Path>) -> Result<OfficialList, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("Nie udało się odczytać Content.xml: {e}"))?;
+    let text = std::fs::read_to_string(path).map_err(|e| tr!("Nie udało się odczytać Content.xml: {e}", "Could not read Content.xml: {e}"))?;
     let readonly = std::fs::metadata(path).map(|m| m.permissions().readonly()).unwrap_or(false);
     // Foldery na dysku: OneStore bez przedrostka „fs24-”, StreamedPackages z przedrostkiem.
     let mut dirs: HashMap<String, PathBuf> = HashMap::new();
@@ -162,7 +162,7 @@ pub fn list(path: &Path, official_dirs: &[String], streamed: Option<&Path>) -> R
 
 /// Zmienia stan pakietów. Zwraca listę (nazwa, poprzednia wartość, nowa wartość).
 pub fn set(path: &Path, changes: &HashMap<String, bool>, backup_dir: &Path) -> Result<Vec<(String, String, String)>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("Nie udało się odczytać Content.xml: {e}"))?;
+    let text = std::fs::read_to_string(path).map_err(|e| tr!("Nie udało się odczytać Content.xml: {e}", "Could not read Content.xml: {e}"))?;
     let boolean_style = PACKAGE.captures_iter(&text).any(|c| c[2].eq_ignore_ascii_case("true") || c[2].eq_ignore_ascii_case("false"));
     let wanted: HashMap<String, bool> = changes.iter().map(|(k, v)| (k.to_lowercase(), *v)).collect();
     let mut done = vec![];
@@ -202,7 +202,7 @@ pub fn backup(path: &Path, dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let target = dir.join(format!("Content-{stamp}.xml"));
-    std::fs::copy(path, &target).map_err(|e| format!("Kopia zapasowa Content.xml: {e}"))?;
+    std::fs::copy(path, &target).map_err(|e| tr!("Kopia zapasowa Content.xml: {e}", "Content.xml backup: {e}"))?;
     let mut all: Vec<PathBuf> = std::fs::read_dir(dir).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default();
     all.retain(|p| p.file_name().map(|n| n.to_string_lossy().starts_with("Content-")).unwrap_or(false));
     all.sort();
@@ -223,7 +223,7 @@ pub fn backups(dir: &Path) -> Vec<String> {
 
 pub fn restore(path: &Path, from: &Path, backup_dir: &Path) -> Result<(), String> {
     if !from.starts_with(backup_dir) {
-        return Err("Nieprawidłowa kopia zapasowa".into());
+        return Err(tr!("Nieprawidłowa kopia zapasowa", "Invalid backup"));
     }
     backup(path, backup_dir)?;
     let data = std::fs::read(from).map_err(|e| e.to_string())?;
@@ -234,7 +234,7 @@ pub fn set_readonly(path: &Path, readonly: bool) -> Result<(), String> {
     let mut perm = std::fs::metadata(path).map_err(|e| e.to_string())?.permissions();
     #[allow(clippy::permissions_set_readonly_false)]
     perm.set_readonly(readonly);
-    std::fs::set_permissions(path, perm).map_err(|e| format!("Zmiana atrybutu Content.xml: {e}"))
+    std::fs::set_permissions(path, perm).map_err(|e| tr!("Zmiana atrybutu Content.xml: {e}", "Changing the Content.xml attribute: {e}"))
 }
 
 #[cfg(test)]

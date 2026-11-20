@@ -316,7 +316,7 @@ pub fn read(dir: &Path) -> PackageInfo {
                 .collect();
         }
     } else if dir.join("manifest.json").exists() {
-        info.error = "Uszkodzony plik manifest.json".into();
+        info.error = MANIFEST_BROKEN.into();
     }
     let (files, has_layout) = file_list(dir);
     info.has_layout = has_layout;
@@ -401,9 +401,9 @@ fn filetime(t: std::time::SystemTime) -> u64 {
 /// Odtwarza `layout.json` i pole `total_package_size` w manifeście (jak MSFSLayoutGenerator).
 pub fn generate_layout(dir: &Path) -> Result<usize, String> {
     let manifest_path = dir.join("manifest.json");
-    let raw = std::fs::read(&manifest_path).map_err(|e| format!("Brak manifest.json: {e}"))?;
+    let raw = std::fs::read(&manifest_path).map_err(|e| tr!("Brak manifest.json: {e}", "manifest.json missing: {e}"))?;
     let raw = raw.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&raw);
-    let mut manifest: serde_json::Value = serde_json::from_slice(raw).map_err(|e| format!("Uszkodzony manifest.json: {e}"))?;
+    let mut manifest: serde_json::Value = serde_json::from_slice(raw).map_err(|e| tr!("Uszkodzony manifest.json: {e}", "Damaged manifest.json: {e}"))?;
     let mut entries = vec![];
     let mut total: u64 = 0;
     for e in walkdir::WalkDir::new(dir).into_iter().filter_map(Result::ok) {
@@ -426,11 +426,11 @@ pub fn generate_layout(dir: &Path) -> Result<usize, String> {
     entries.sort_by(|a, b| a["path"].as_str().cmp(&b["path"].as_str()));
     let count = entries.len();
     let layout = serde_json::to_string_pretty(&serde_json::json!({ "content": entries })).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("layout.json"), layout).map_err(|e| format!("Zapis layout.json: {e}"))?;
+    std::fs::write(dir.join("layout.json"), layout).map_err(|e| tr!("Zapis layout.json: {e}", "Writing layout.json: {e}"))?;
     if let Some(obj) = manifest.as_object_mut() {
         obj.insert("total_package_size".into(), serde_json::Value::String(format!("{total:020}")));
         let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
-        std::fs::write(&manifest_path, text).map_err(|e| format!("Zapis manifest.json: {e}"))?;
+        std::fs::write(&manifest_path, text).map_err(|e| tr!("Zapis manifest.json: {e}", "Writing manifest.json: {e}"))?;
     }
     Ok(count)
 }
@@ -515,5 +515,16 @@ title=737 LOT
         let mut found = find_packages(dir.path(), 4);
         found.sort();
         assert_eq!(found.len(), 2);
+    }
+}
+
+/// Kod błędu w `info.error` (skan trafia do pamięci podręcznej, więc tekst tłumaczymy dopiero przy wyświetlaniu).
+pub const MANIFEST_BROKEN: &str = "manifest-broken";
+
+/// Tekst błędu pakietu w bieżącym języku. Rozumie też polski tekst ze starszych wersji pamięci podręcznej.
+pub fn error_text(code: &str) -> String {
+    match code {
+        MANIFEST_BROKEN | "Uszkodzony plik manifest.json" => tr!("Uszkodzony plik manifest.json", "Damaged manifest.json file"),
+        other => other.to_string(),
     }
 }

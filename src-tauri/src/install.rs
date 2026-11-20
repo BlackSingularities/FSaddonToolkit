@@ -29,11 +29,11 @@ fn seven_zip() -> Option<PathBuf> {
 }
 
 fn extract_zip(archive: &Path, dest: &Path, progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
-    let file = std::fs::File::open(archive).map_err(|e| format!("Otwarcie archiwum: {e}"))?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("Uszkodzone archiwum ZIP: {e}"))?;
+    let file = std::fs::File::open(archive).map_err(|e| tr!("Otwarcie archiwum: {e}", "Opening the archive: {e}"))?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| tr!("Uszkodzone archiwum ZIP: {e}", "Damaged ZIP archive: {e}"))?;
     let total = zip.len() as u64;
     for i in 0..zip.len() {
-        let mut f = zip.by_index(i).map_err(|e| format!("Archiwum ZIP: {e}"))?;
+        let mut f = zip.by_index(i).map_err(|e| tr!("Archiwum ZIP: {e}", "ZIP archive: {e}"))?;
         // `enclosed_name` odrzuca ścieżki wychodzące poza folder docelowy („../”).
         let Some(rel) = f.enclosed_name() else { continue };
         let out = dest.join(&rel);
@@ -44,8 +44,8 @@ fn extract_zip(archive: &Path, dest: &Path, progress: &mut dyn FnMut(u64, u64)) 
         if let Some(parent) = out.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let mut w = std::fs::File::create(&out).map_err(|e| format!("Zapis {}: {e}", out.display()))?;
-        std::io::copy(&mut f, &mut w).map_err(|e| format!("Rozpakowanie {}: {e}", rel.display()))?;
+        let mut w = std::fs::File::create(&out).map_err(|e| tr!("Zapis {}: {e}", "Writing {}: {e}", out.display()))?;
+        std::io::copy(&mut f, &mut w).map_err(|e| tr!("Rozpakowanie {}: {e}", "Extracting {}: {e}", rel.display()))?;
         if i % 50 == 0 {
             progress(i as u64, total);
         }
@@ -61,11 +61,12 @@ fn extract_external(archive: &Path, dest: &Path) -> Result<(), String> {
     } else {
         hidden(Command::new("tar.exe").arg("-xf").arg(archive).arg("-C").arg(dest)).output()
     }
-    .map_err(|e| format!("Nie udało się uruchomić rozpakowywania: {e}"))?;
+    .map_err(|e| tr!("Nie udało się uruchomić rozpakowywania: {e}", "Could not start extraction: {e}"))?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
+        return Err(tr!(
             "Nie udało się rozpakować {} – zainstaluj 7-Zip (7-zip.org) albo rozpakuj ręcznie. {}",
+            "Could not extract {} – install 7-Zip (7-zip.org) or extract it manually. {}",
             archive.file_name().unwrap_or_default().to_string_lossy(),
             err.lines().last().unwrap_or("")
         ));
@@ -96,22 +97,22 @@ fn place(staging: &Path, library: &Path, replace: bool, errors: &mut Vec<String>
         let mut replaced = false;
         if dest.exists() {
             if !replace {
-                errors.push(format!("„{folder}” jest już w bibliotece – pominięto (włącz zastępowanie, żeby zaktualizować)"));
+                errors.push(tr!("„{folder}” jest już w bibliotece – pominięto (włącz zastępowanie, żeby zaktualizować)", "“{folder}” is already in the library – skipped (turn on replacing to update it)"));
                 continue;
             }
             if crate::links::is_link(&dest) {
-                errors.push(format!("„{folder}” w bibliotece jest łączem – pominięto"));
+                errors.push(tr!("„{folder}” w bibliotece jest łączem – pominięto", "“{folder}” in the library is a link – skipped"));
                 continue;
             }
             if let Err(e) = trash::delete(&dest) {
-                errors.push(format!("Nie udało się usunąć starej wersji „{folder}”: {e}"));
+                errors.push(tr!("Nie udało się usunąć starej wersji „{folder}”: {e}", "Could not remove the old version of “{folder}”: {e}"));
                 continue;
             }
             replaced = true;
         }
         match std::fs::rename(&p, &dest) {
             Ok(()) => out.push(Installed { folder, path: dest.to_string_lossy().into_owned(), replaced }),
-            Err(e) => errors.push(format!("Przeniesienie „{folder}”: {e}")),
+            Err(e) => errors.push(tr!("Przeniesienie „{folder}”: {e}", "Moving “{folder}”: {e}")),
         }
     }
     out
@@ -128,7 +129,7 @@ pub fn install_archive(archive: &Path, library: &Path, replace: bool, errors: &m
         Ok(()) => {
             let placed = place(&staging, library, replace, errors);
             if placed.is_empty() && errors.is_empty() {
-                errors.push(format!("W archiwum {} nie ma pakietu MSFS (brak manifest.json)", archive.file_name().unwrap_or_default().to_string_lossy()));
+                errors.push(tr!("W archiwum {} nie ma pakietu MSFS (brak manifest.json)", "The archive {} contains no MSFS package (no manifest.json)", archive.file_name().unwrap_or_default().to_string_lossy()));
             }
             placed
         }
@@ -145,7 +146,7 @@ pub fn install_archive(archive: &Path, library: &Path, replace: bool, errors: &m
 pub fn install_folder(dir: &Path, library: &Path, replace: bool, errors: &mut Vec<String>, progress: &mut dyn FnMut(u64, u64)) -> Vec<Installed> {
     let found = package::find_packages(dir, 5);
     if found.is_empty() {
-        errors.push(format!("W folderze {} nie ma pakietu MSFS (brak manifest.json)", dir.display()));
+        errors.push(tr!("W folderze {} nie ma pakietu MSFS (brak manifest.json)", "The folder {} contains no MSFS package (no manifest.json)", dir.display()));
         return vec![];
     }
     let staging = library.join(format!(".fsat-tmp-{}", crate::store::new_id()));
@@ -168,9 +169,9 @@ pub fn flatten(wrapper: &Path, community: &Path) -> Result<usize, String> {
         let folder = p.file_name().unwrap_or_default();
         let dest = community.join(folder);
         if dest.exists() {
-            return Err(format!("W Community jest już „{}”", folder.to_string_lossy()));
+            return Err(tr!("W Community jest już „{}”", "Community already contains “{}”", folder.to_string_lossy()));
         }
-        std::fs::rename(&p, &dest).map_err(|e| format!("Przeniesienie: {e}"))?;
+        std::fs::rename(&p, &dest).map_err(|e| tr!("Przeniesienie: {e}", "Moving: {e}"))?;
         moved += 1;
     }
     // Pusty (lub prawie pusty) folder po paczce trafia do kosza.

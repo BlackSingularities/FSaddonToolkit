@@ -1,5 +1,11 @@
 # Zmiany
 
+## 1.5.3
+
+- Kondycja, komunikaty o błędach, wyniki napraw i etykiety zadań w tle są po angielsku, gdy aplikacja jest po angielsku (wcześniej przychodziły z backendu zawsze po polsku).
+- Po zmianie języka w ustawieniach lista problemów w Kondycji odświeża się w nowym języku.
+- Starsze wpisy historii zapisane po polsku wyświetlają się w bieżącym języku.
+
 ## 1.5.2
 
 - Język aplikacji idzie za językiem systemu: poza polskim Windowsem aplikacja startuje po angielsku (wcześniej zawsze po polsku). Wybór w ustawieniach ma pierwszeństwo.

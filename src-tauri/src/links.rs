@@ -69,10 +69,10 @@ fn is_network(path: &Path) -> bool {
 /// próbuje dowiązania symbolicznego.
 pub fn create(link: &Path, target: &Path, mode: Mode) -> Result<(), String> {
     if std::fs::symlink_metadata(link).is_ok() {
-        return Err(format!("W folderze Community istnieje już „{}”", link.file_name().unwrap_or_default().to_string_lossy()));
+        return Err(tr!("W folderze Community istnieje już „{}”", "The Community folder already contains “{}”", link.file_name().unwrap_or_default().to_string_lossy()));
     }
     if !target.is_dir() {
-        return Err(format!("Folder dodatku nie istnieje: {}", target.display()));
+        return Err(tr!("Folder dodatku nie istnieje: {}", "The add-on folder does not exist: {}", target.display()));
     }
     let want_symlink = mode == Mode::Symlink || is_network(target);
     if !want_symlink {
@@ -90,7 +90,7 @@ pub fn create(link: &Path, target: &Path, mode: Mode) -> Result<(), String> {
 
 #[cfg(windows)]
 fn create_junction(link: &Path, target: &Path) -> Result<(), String> {
-    junction::create(target, link).map_err(|e| format!("Nie udało się utworzyć łącza katalogu: {e}"))
+    junction::create(target, link).map_err(|e| tr!("Nie udało się utworzyć łącza katalogu: {e}", "Could not create the directory junction: {e}"))
 }
 
 #[cfg(not(windows))]
@@ -102,26 +102,26 @@ fn create_junction(link: &Path, target: &Path) -> Result<(), String> {
 fn create_symlink(link: &Path, target: &Path) -> Result<(), String> {
     std::os::windows::fs::symlink_dir(target, link).map_err(|e| {
         if e.raw_os_error() == Some(1314) {
-            "Dowiązania symboliczne wymagają włączonego trybu dewelopera Windows (Ustawienia → System → Dla deweloperów)".to_string()
+            tr!("Dowiązania symboliczne wymagają włączonego trybu dewelopera Windows (Ustawienia → System → Dla deweloperów)", "Symbolic links require Windows Developer Mode (Settings → System → For developers)")
         } else {
-            format!("Nie udało się utworzyć dowiązania: {e}")
+            tr!("Nie udało się utworzyć dowiązania: {e}", "Could not create the symbolic link: {e}")
         }
     })
 }
 
 #[cfg(not(windows))]
 fn create_symlink(link: &Path, target: &Path) -> Result<(), String> {
-    std::os::unix::fs::symlink(target, link).map_err(|e| format!("Nie udało się utworzyć dowiązania: {e}"))
+    std::os::unix::fs::symlink(target, link).map_err(|e| tr!("Nie udało się utworzyć dowiązania: {e}", "Could not create the symbolic link: {e}"))
 }
 
 /// Usuwa samo łącze. Odmawia, gdy ścieżka jest zwykłym folderem.
 pub fn remove(link: &Path) -> Result<(), String> {
     if !is_link(link) {
-        return Err(format!("„{}” nie jest łączem – nie usuwam zwykłego folderu", link.display()));
+        return Err(tr!("„{}” nie jest łączem – nie usuwam zwykłego folderu", "“{}” is not a link – not deleting a regular folder", link.display()));
     }
     std::fs::remove_dir(link)
         .or_else(|_| std::fs::remove_file(link))
-        .map_err(|e| format!("Nie udało się usunąć łącza: {e}"))
+        .map_err(|e| tr!("Nie udało się usunąć łącza: {e}", "Could not remove the link: {e}"))
 }
 
 /// Czy dwie ścieżki leżą na tym samym woluminie (wtedy przeniesienie to zwykła zmiana nazwy).

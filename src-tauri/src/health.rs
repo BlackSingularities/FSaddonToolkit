@@ -41,17 +41,17 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
     let mut out = vec![];
 
     for lib in scan.libraries.iter().filter(|l| !l.exists) {
-        let mut i = issue("error", "library-missing", format!("Biblioteka „{}” jest niedostępna", lib.name), format!("Folder {} nie istnieje albo dysk jest odłączony. Pakiety z tej biblioteki nie są widoczne.", lib.path));
+        let mut i = issue("error", "library-missing", tr!("Biblioteka „{}” jest niedostępna", "Library “{}” is unavailable", lib.name), tr!("Folder {} nie istnieje albo dysk jest odłączony. Pakiety z tej biblioteki nie są widoczne.", "Folder {} does not exist or the drive is disconnected. Packages from this library are not visible.", lib.path));
         i.paths = vec![lib.path.clone()];
         out.push(i);
     }
 
     for b in &scan.broken {
         let name = b.link.rsplit('\\').next().unwrap_or(&b.link).to_string();
-        let mut i = issue("error", "broken-link", format!("Zerwane łącze: {name}"), format!("Łącze w Community wskazuje na {} – ten folder nie istnieje. Symulator może zgłaszać błędy przy wczytywaniu.", b.target));
+        let mut i = issue("error", "broken-link", tr!("Zerwane łącze: {name}", "Broken link: {name}"), tr!("Łącze w Community wskazuje na {} – ten folder nie istnieje. Symulator może zgłaszać błędy przy wczytywaniu.", "A link in Community points to {} – that folder does not exist. The simulator may report errors while loading.", b.target));
         i.paths = vec![b.link.clone()];
         i.fix = "remove-link".into();
-        i.fix_label = "Usuń łącze".into();
+        i.fix_label = tr!("Usuń łącze", "Remove link");
         out.push(i);
     }
 
@@ -59,24 +59,24 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
         let name = s.path.rsplit('\\').next().unwrap_or(&s.path).to_string();
         match s.kind.as_str() {
             "folder" if !s.nested.is_empty() => {
-                let mut i = issue("warn", "nested", format!("Paczka w dodatkowym folderze: {name}"), format!("Symulator nie widzi {} pakietów schowanych o poziom głębiej. Wyciągnięcie ich do Community naprawi instalację.", s.nested.len()));
+                let mut i = issue("warn", "nested", tr!("Paczka w dodatkowym folderze: {name}", "Package inside an extra folder: {name}"), tr!("Symulator nie widzi {} pakietów schowanych o poziom głębiej. Wyciągnięcie ich do Community naprawi instalację.", "The simulator cannot see {} package(s) nested one level too deep. Pulling them out into Community fixes the install.", s.nested.len()));
                 i.paths = vec![s.path.clone()];
                 i.fix = "flatten".into();
-                i.fix_label = "Wyciągnij pakiety".into();
+                i.fix_label = tr!("Wyciągnij pakiety", "Pull packages out");
                 out.push(i);
             }
             "folder" => {
-                let mut i = issue("info", "no-manifest", format!("Folder bez manifest.json: {name}"), "To nie jest pakiet MSFS – symulator go pomija, ale przeszukuje przy każdym starcie.".into());
+                let mut i = issue("info", "no-manifest", tr!("Folder bez manifest.json: {name}", "Folder without manifest.json: {name}"), tr!("To nie jest pakiet MSFS – symulator go pomija, ale przeszukuje przy każdym starcie.", "This is not an MSFS package – the simulator skips it, but still scans it on every start."));
                 i.paths = vec![s.path.clone()];
                 i.fix = "trash".into();
-                i.fix_label = "Do kosza".into();
+                i.fix_label = tr!("Do kosza", "Recycle Bin");
                 out.push(i);
             }
             "archive" => {
-                let mut i = issue("info", "archive", format!("Archiwum w Community: {name}"), "Archiwa w Community nic nie robią. Zainstaluj je do biblioteki albo usuń.".into());
+                let mut i = issue("info", "archive", tr!("Archiwum w Community: {name}", "Archive in Community: {name}"), tr!("Archiwa w Community nic nie robią. Zainstaluj je do biblioteki albo usuń.", "Archives in Community do nothing. Install them into a library or delete them."));
                 i.paths = vec![s.path.clone()];
                 i.fix = "install".into();
-                i.fix_label = "Zainstaluj".into();
+                i.fix_label = tr!("Zainstaluj", "Install");
                 out.push(i);
             }
             _ => {}
@@ -93,12 +93,12 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
         let enabled = copies.iter().filter(|p| p.enabled).count();
         let title = &copies[0].info.title;
         let mut i = if enabled > 1 {
-            let mut i = issue("error", "double-enabled", format!("Kilka kopii włączonych naraz: {title}"), "Ten sam pakiet jest w Community więcej niż raz – symulator wczyta tylko jedną kopię i może mieszać pliki.".into());
+            let mut i = issue("error", "double-enabled", tr!("Kilka kopii włączonych naraz: {title}", "Several copies enabled at once: {title}"), tr!("Ten sam pakiet jest w Community więcej niż raz – symulator wczyta tylko jedną kopię i może mieszać pliki.", "The same package is in Community more than once – the simulator loads only one copy and may mix files."));
             i.fix = "disable-copies".into();
-            i.fix_label = "Zostaw jedną".into();
+            i.fix_label = tr!("Zostaw jedną", "Keep one");
             i
         } else {
-            issue("info", "duplicate", format!("Duplikat: {title}"), format!("{} kopie tego samego pakietu zajmują miejsce na dysku.", copies.len()))
+            issue("info", "duplicate", tr!("Duplikat: {title}", "Duplicate: {title}"), tr!("{} kopie tego samego pakietu zajmują miejsce na dysku.", "{} copies of the same package take up disk space.", copies.len()))
         };
         i.packages = copies.iter().map(|p| p.id.clone()).collect();
         i.paths = copies.iter().map(|p| format!("{} · {}", p.info.version, p.path)).collect();
@@ -113,26 +113,26 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
                 continue;
             }
             if let Some(dep) = scan.packages.iter().find(|x| x.key == k) {
-                let mut i = issue("warn", "dependency-off", format!("Wyłączona zależność: {}", dep.info.title), format!("„{}” wymaga pakietu „{}”, który jest wyłączony.", p.info.title, dep.info.title));
+                let mut i = issue("warn", "dependency-off", tr!("Wyłączona zależność: {}", "Disabled dependency: {}", dep.info.title), tr!("„{}” wymaga pakietu „{}”, który jest wyłączony.", "“{}” requires “{}”, which is disabled.", p.info.title, dep.info.title));
                 i.packages = vec![dep.id.clone(), p.id.clone()];
                 i.fix = "enable".into();
-                i.fix_label = "Włącz zależność".into();
+                i.fix_label = tr!("Włącz zależność", "Enable dependency");
                 out.push(i);
             } else {
-                let mut i = issue("info", "dependency-missing", format!("Brak zależności: {}", d.name), format!("„{}” deklaruje zależność od „{}”, której nie ma w Community ani w bibliotekach (może to być pakiet oficjalny).", p.info.title, d.name));
+                let mut i = issue("info", "dependency-missing", tr!("Brak zależności: {}", "Missing dependency: {}", d.name), tr!("„{}” deklaruje zależność od „{}”, której nie ma w Community ani w bibliotekach (może to być pakiet oficjalny).", "“{}” declares a dependency on “{}”, which is not in Community or any library (it may be an official package).", p.info.title, d.name));
                 i.packages = vec![p.id.clone()];
                 out.push(i);
             }
         }
         if p.info.has_manifest && !p.info.has_layout {
-            let mut i = issue("warn", "no-layout", format!("Brak layout.json: {}", p.info.title), "Bez layout.json symulator nie zna plików pakietu – dodatek może się nie wczytać. Plik da się odtworzyć.".into());
+            let mut i = issue("warn", "no-layout", tr!("Brak layout.json: {}", "Missing layout.json: {}", p.info.title), tr!("Bez layout.json symulator nie zna plików pakietu – dodatek może się nie wczytać. Plik da się odtworzyć.", "Without layout.json the simulator does not know the package files – the add-on may not load. The file can be regenerated."));
             i.packages = vec![p.id.clone()];
             i.fix = "layout".into();
-            i.fix_label = "Odtwórz layout.json".into();
+            i.fix_label = tr!("Odtwórz layout.json", "Regenerate layout.json");
             out.push(i);
         }
         if !p.info.error.is_empty() {
-            let mut i = issue("error", "manifest", format!("{}: {}", p.info.title, p.info.error), p.path.clone());
+            let mut i = issue("error", "manifest", format!("{}: {}", p.info.title, crate::package::error_text(&p.info.error)), p.path.clone());
             i.packages = vec![p.id.clone()];
             out.push(i);
         }
@@ -154,7 +154,7 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
             continue;
         }
         let names: Vec<String> = list.iter().map(|p| p.info.title.clone()).collect();
-        let mut i = issue("warn", "airport-conflict", format!("Konflikt lotniska {icao}"), format!("{} włączone scenerie zawierają {icao}: {}. Zostaw jedną.", ids.len(), names.join(", ")));
+        let mut i = issue("warn", "airport-conflict", tr!("Konflikt lotniska {icao}", "Airport conflict {icao}"), tr!("{} włączone scenerie zawierają {icao}: {}. Zostaw jedną.", "{} enabled sceneries contain {icao}: {}. Keep one.", ids.len(), names.join(", ")));
         i.packages = ids;
         out.push(i);
     }
@@ -162,10 +162,10 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
     let native: Vec<&crate::engine::Pkg> = scan.packages.iter().filter(|p| p.source == "community").collect();
     if !native.is_empty() && !scan.libraries.is_empty() {
         let size: u64 = native.iter().map(|p| p.info.size).sum();
-        let mut i = issue("info", "native", format!("{} pakietów leży bezpośrednio w Community", native.len()), format!("Razem {:.1} GB. Po przeniesieniu do biblioteki zostaną włączone przez łącza – Community zostaje czysty, a dodatki można trzymać na innym dysku.", size as f64 / 1e9));
+        let mut i = issue("info", "native", tr!("{} pakietów leży bezpośrednio w Community", "{} packages sit directly in Community", native.len()), tr!("Razem {:.1} GB. Po przeniesieniu do biblioteki zostaną włączone przez łącza – Community zostaje czysty, a dodatki można trzymać na innym dysku.", "{:.1} GB in total. Moved to a library, they get enabled through links – Community stays clean and add-ons can live on another drive.", size as f64 / 1e9));
         i.packages = native.iter().map(|p| p.id.clone()).collect();
         i.fix = "relocate".into();
-        i.fix_label = "Przenieś do biblioteki".into();
+        i.fix_label = tr!("Przenieś do biblioteki", "Move to library");
         out.push(i);
     }
 
