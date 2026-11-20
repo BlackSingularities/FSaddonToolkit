@@ -89,7 +89,7 @@ On first launch the toolkit reads your existing links (for example from MSFS Add
 
 ### Installation
 
-1. Download the archive and run the installer, or use the portable `.exe` without installing.
+1. Download the archive and run the installer inside (`FSAddonToolkit_x.y.z_x64-setup.exe`). If SmartScreen warns about it, choose More info → Run anyway.
 2. Start **FS Addon Toolkit**. Your simulator installation is detected automatically from `UserCfg.opt`.
 3. In **Settings**, add the folders where you keep your add-ons as libraries. Existing links in Community are picked up and offered automatically.
 4. Switch add-ons on and off, and launch the sim straight from the toolkit.

@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- Plakat na flightsim.to (1920x1080). Render: docs/flightsimto/poster/render.ps1 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FS Addon Toolkit poster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800;900&family=JetBrains+Mono:wght@500;700&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a1220;
+    --bg2: #0f1b2e;
+    --ink: #ffffff;
+    --muted: #b7c3d6;
+    --dim: #8494ad;
+    --blue: #3aa0ff;
+    --cyan: #5cc8ff;
+    --amber: #ffbf3c;
+    --frame: #1a2638;
+    --line: rgba(92, 200, 255, .10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(1100px 700px at 78% 30%, rgba(58, 160, 255, .16), transparent 70%),
+      radial-gradient(800px 600px at 8% 100%, rgba(58, 160, 255, .10), transparent 70%),
+      linear-gradient(160deg, var(--bg2), var(--bg) 60%);
+    color: var(--ink);
+    font-family: Inter, "Segoe UI", sans-serif;
+    position: relative;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(1200px 800px at 60% 40%, #000 20%, transparent 85%);
+  }
+  .rays { position: absolute; inset: 0; }
+
+  .left { position: absolute; left: 96px; top: 96px; width: 690px; }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  .brand img { width: 118px; height: 118px; filter: drop-shadow(0 10px 30px rgba(58, 160, 255, .45)); }
+  .brand h1 { font-size: 84px; font-weight: 900; letter-spacing: -2.5px; line-height: .95; }
+  .brand h1 span { color: var(--cyan); display: block; }
+  .kicker {
+    margin-top: 34px; font-family: "JetBrains Mono", monospace; font-weight: 700;
+    font-size: 19px; letter-spacing: 6px; color: var(--cyan);
+  }
+  .kicker i { font-style: normal; color: var(--dim); margin: 0 14px; }
+  .title { margin-top: 26px; font-size: 56px; font-weight: 800; line-height: 1.04; letter-spacing: -1.2px; }
+  .title em { font-style: normal; color: var(--amber); display: block; }
+  .lead { margin-top: 26px; font-size: 21px; max-width: 670px; line-height: 1.5; color: var(--muted); }
+
+  .features {
+    margin-top: 36px; display: grid; grid-template-columns: 1fr 1fr;
+    gap: 17px 30px; list-style: none; font-size: 20.5px; font-weight: 500;
+  }
+  .features li { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+  .features li::before {
+    content: ""; width: 9px; height: 9px; border-radius: 50%; flex: none;
+    background: var(--cyan); box-shadow: 0 0 10px rgba(92, 200, 255, .8);
+  }
+
+  .bottom { position: absolute; left: 96px; bottom: 92px; }
+  .chips { display: flex; gap: 12px; }
+  .chip {
+    font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 17px;
+    padding: 9px 15px; border-radius: 999px; color: #d6e6ff;
+    border: 1.5px solid rgba(92, 200, 255, .35); background: rgba(58, 160, 255, .08);
+  }
+  .chip.warm { color: var(--amber); border-color: rgba(255, 191, 60, .4); background: rgba(255, 191, 60, .08); }
+  .free { margin-top: 34px; display: flex; align-items: baseline; gap: 18px; }
+  .free b { font-size: 40px; font-weight: 900; letter-spacing: -1px; }
+  .free span { font-size: 20px; color: var(--muted); }
+  .by { margin-top: 14px; font-size: 19px; color: var(--dim); }
+  .by b { color: var(--ink); font-weight: 600; }
+
+  .win {
+    position: absolute; border-radius: 14px; overflow: hidden;
+    background: var(--frame); border: 1px solid rgba(255, 255, 255, .12);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px rgba(0, 0, 0, .4);
+  }
+  .bar {
+    height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 16px;
+    background: #121c2c; font-size: 14px; color: var(--muted);
+  }
+  .bar b { width: 11px; height: 11px; border-radius: 50%; background: #3a4558; }
+  .bar span { margin-left: 12px; }
+  .win img { display: block; width: 100%; }
+  .w1 { left: 830px; top: 92px; width: 1014px; }
+  .w3 { left: 1100px; top: 560px; width: 790px; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <svg class="rays" viewBox="0 0 1920 1080" fill="none" stroke="rgba(92,200,255,.10)" stroke-width="1.5">
+    <path d="M60 1080 L760 380"/><path d="M0 860 L520 340"/><path d="M1920 300 L1500 0"/>
+  </svg>
+
+  <section class="left">
+    <div class="brand">
+      <img src="../../../src-tauri/icons/icon.png" alt="">
+      <h1>FS Addon<span>Toolkit</span></h1>
+    </div>
+    <div class="kicker">ADD-ONS<i>·</i>AIRPORT MAP<i>·</i>PROFILES</div>
+    <h2 class="title">Your Community folder, <em>finally under control</em></h2>
+    <p class="lead">A free add-on manager for MSFS 2024 and 2020. Keep add-ons on any drive and choose with one click what the simulator loads. Nothing is copied or deleted.</p>
+    <ul class="features">
+      <li>One-click enable &amp; disable</li>
+      <li>Libraries on any drive</li>
+      <li>Airport map from BGL files</li>
+      <li>Profiles &amp; Light mode</li>
+      <li>Flight prep from SimBrief</li>
+      <li>Health check &amp; layout fix</li>
+      <li>No admin rights needed</li>
+      <li>Undo anything with Ctrl+Z</li>
+    </ul>
+  </section>
+
+  <section class="bottom">
+    <div class="chips">
+      <span class="chip">MSFS 2024</span>
+      <span class="chip">MSFS 2020</span>
+      <span class="chip">Steam</span>
+      <span class="chip">MS Store</span>
+      <span class="chip warm">Windows 10 / 11</span>
+    </div>
+    <div class="free"><b>100% free</b><span>open source · no ads · updates itself</span></div>
+    <div class="by">by <b>Adam Rędzikowski</b></div>
+  </section>
+
+  <div class="win w1"><div class="bar"><b></b><b></b><b></b><span>FS Addon Toolkit · Add-ons</span></div><img src="../screenshots/01-addons.png" alt=""></div>
+  <div class="win w3"><div class="bar"><b></b><b></b><b></b><span>FS Addon Toolkit · Airport map</span></div><img src="../screenshots/05-map.png" alt=""></div>
+</body>
+</html>
