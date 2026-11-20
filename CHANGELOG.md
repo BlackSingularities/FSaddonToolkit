@@ -1,5 +1,10 @@
 # Zmiany
 
+## 1.5.2
+
+- Język aplikacji idzie za językiem systemu: poza polskim Windowsem aplikacja startuje po angielsku (wcześniej zawsze po polsku). Wybór w ustawieniach ma pierwszeństwo.
+- Instalator domyślnie po angielsku; po polsku tylko na polskim Windowsie.
+
 ## 1.5.1
 
 - Aktualizacja z poziomu aplikacji nie kończy się już błędem 740: instalator uruchamia się z oknem uprawnień administratora (UAC).

@@ -43,6 +43,8 @@ pub struct Settings {
     pub theme: String,
     pub accent: String,
     pub language: String,
+    /// Użytkownik sam wybrał język w ustawieniach. Do tego czasu język idzie za systemem.
+    pub language_picked: bool,
     pub view: String,
     pub card_size: u32,
     pub map_style: String,
@@ -72,7 +74,8 @@ impl Default for Settings {
             auto_update_check: true,
             theme: "dark".into(),
             accent: "sky".into(),
-            language: "pl".into(),
+            language: String::new(),
+            language_picked: false,
             view: "grid".into(),
             card_size: 240,
             map_style: "dark".into(),

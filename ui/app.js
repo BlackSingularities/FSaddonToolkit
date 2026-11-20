@@ -1854,7 +1854,7 @@ function viewSettings(v) {
   $('#st-map').onchange = (e) => { s.mapStyle = e.target.value; persist(); };
   $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));
-  $('#st-lang').onchange = (e) => { s.language = e.target.value; setLang(s.language); persist(); renderRail(); renderView(); };
+  $('#st-lang').onchange = (e) => { s.language = e.target.value; s.languagePicked = true; setLang(s.language); persist(); renderRail(); renderView(); };
   $('#st-card').oninput = (e) => { s.cardSize = +e.target.value; applyTheme(); persist(); };
   $('#st-upd').onclick = () => checkUpdate(false);
   $('#st-site').onclick = (e) => { e.preventDefault(); opener.openUrl('https://redzikowski.com'); };
@@ -1956,7 +1956,12 @@ window.addEventListener('focus', debounce(async () => {
   try {
     [S.info, S.settings, S.installs, S.profiles] = await Promise.all([invoke('app_info'), invoke('get_settings'), invoke('installations'), invoke('get_profiles')]);
   } catch (e) { toast(errMsg(e), 'bad'); }
-  setLang(S.settings.language || 'pl');
+  // Dopóki użytkownik nie wybierze języka sam, idziemy za językiem systemu (polski tylko na polskim Windowsie).
+  if (!S.settings.languagePicked || !S.settings.language) {
+    const sys = (navigator.languages?.[0] || navigator.language || 'en').toLowerCase();
+    S.settings.language = sys.startsWith('pl') ? 'pl' : 'en';
+  }
+  setLang(S.settings.language);
   S.f.sort = S.settings.sort || 'title';
   applyTheme();
   renderRail();
