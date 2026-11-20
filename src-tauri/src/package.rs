@@ -435,6 +435,17 @@ pub fn generate_layout(dir: &Path) -> Result<usize, String> {
     Ok(count)
 }
 
+/// Kod błędu w `info.error` (skan trafia do pamięci podręcznej, więc tekst tłumaczymy dopiero przy wyświetlaniu).
+pub const MANIFEST_BROKEN: &str = "manifest-broken";
+
+/// Tekst błędu pakietu w bieżącym języku. Rozumie też polski tekst ze starszych wersji pamięci podręcznej.
+pub fn error_text(code: &str) -> String {
+    match code {
+        MANIFEST_BROKEN | "Uszkodzony plik manifest.json" => tr!("Uszkodzony plik manifest.json", "Damaged manifest.json file"),
+        other => other.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -515,16 +526,5 @@ title=737 LOT
         let mut found = find_packages(dir.path(), 4);
         found.sort();
         assert_eq!(found.len(), 2);
-    }
-}
-
-/// Kod błędu w `info.error` (skan trafia do pamięci podręcznej, więc tekst tłumaczymy dopiero przy wyświetlaniu).
-pub const MANIFEST_BROKEN: &str = "manifest-broken";
-
-/// Tekst błędu pakietu w bieżącym języku. Rozumie też polski tekst ze starszych wersji pamięci podręcznej.
-pub fn error_text(code: &str) -> String {
-    match code {
-        MANIFEST_BROKEN | "Uszkodzony plik manifest.json" => tr!("Uszkodzony plik manifest.json", "Damaged manifest.json file"),
-        other => other.to_string(),
     }
 }
