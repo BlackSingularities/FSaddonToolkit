@@ -37,7 +37,7 @@ On first launch the toolkit reads your existing links (for example from MSFS Add
 
 **Package details**
 - Image gallery, aircraft variants from `aircraft.cfg`, an airport mini-map and liveries for this aircraft
-- Dependencies and "required by", notes, tags, custom category, favourite and **lock** (a locked package is never disabled by bulk actions)
+- Dependencies (from `manifest.json` or added by you) and "required by" – enabling an add-on can enable its dependencies too, disabling warns when something still needs it, notes, tags, custom category, favourite and **lock** (a locked package is never disabled by bulk actions)
 - A clear "library → link → Community" diagram, `manifest.json` and release notes
 
 **Airport map**

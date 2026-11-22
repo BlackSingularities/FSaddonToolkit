@@ -40,6 +40,19 @@ pub struct Pkg {
     pub meta: PackageMeta,
 }
 
+impl Pkg {
+    /// Klucze pakietów, których ten wymaga: z manifest.json i dodane ręcznie (`true` = ręczna).
+    pub fn requires(&self) -> Vec<(String, bool)> {
+        let mut out: Vec<(String, bool)> = Vec::new();
+        for k in self.info.dependencies.iter().map(|d| (d.name.to_lowercase(), false)).chain(self.meta.requires.iter().map(|r| (r.to_lowercase(), true))) {
+            if k.0 != self.key && !out.iter().any(|(o, _)| *o == k.0) {
+                out.push(k);
+            }
+        }
+        out
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Broken {
@@ -545,6 +558,28 @@ mod tests {
         std::fs::create_dir_all(&p).unwrap();
         std::fs::write(p.join("manifest.json"), format!(r#"{{"title":"{name}","content_type":"{ct}"}}"#)).unwrap();
         p
+    }
+
+    #[test]
+    fn requires_merges_manifest_and_manual() {
+        let p = Pkg {
+            id: "x".into(),
+            key: "scenery-epkk".into(),
+            folder: "scenery-epkk".into(),
+            path: String::new(),
+            source: "library".into(),
+            library_id: String::new(),
+            library_name: String::new(),
+            group: String::new(),
+            enabled: false,
+            link: String::new(),
+            info: crate::package::PackageInfo {
+                dependencies: vec![crate::package::Dependency { name: "Vendor-Lib".into(), version: String::new() }],
+                ..Default::default()
+            },
+            meta: PackageMeta { requires: vec!["vendor-lib".into(), "mesh-pl".into(), "scenery-epkk".into()], ..Default::default() },
+        };
+        assert_eq!(p.requires(), vec![("vendor-lib".to_string(), false), ("mesh-pl".to_string(), true)]);
     }
 
     #[test]

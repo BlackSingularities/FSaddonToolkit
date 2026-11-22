@@ -23,6 +23,8 @@ pub struct PackageMeta {
     pub category: String,
     pub tags: Vec<String>,
     pub note: String,
+    /// Zależności dodane ręcznie (klucze pakietów) – dla dodatków, które nie deklarują ich w manifest.json.
+    pub requires: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +60,8 @@ pub struct Settings {
     pub livery_prompt: String,
     /// SimBrief: nazwa pilota (alias Navigraph) albo Pilot ID. Pusty = funkcja nieużywana.
     pub simbrief_user: String,
+    /// Zależności przy włączaniu dodatku: "ask" | "all" | "none".
+    pub dependency_prompt: String,
 }
 
 impl Default for Settings {
@@ -85,6 +89,7 @@ impl Default for Settings {
             onboarded: false,
             livery_prompt: "ask".into(),
             simbrief_user: String::new(),
+            dependency_prompt: "ask".into(),
         }
     }
 }

@@ -155,7 +155,7 @@ async function saveSettings() {
 const persist = debounce(saveSettings, 300);
 function meta(key) {
   S.settings.meta ||= {};
-  return (S.settings.meta[key] ||= { favorite: false, locked: false, category: '', tags: [], note: '' });
+  return (S.settings.meta[key] ||= { favorite: false, locked: false, category: '', tags: [], note: '', requires: [] });
 }
 async function setMeta(p, patch) {
   Object.assign(meta(p.key), patch);
@@ -197,11 +197,121 @@ async function withLiveries(ids, on) {
   if (r === null) return null;
   return [...ids, ...r];
 }
+// Zależności: z manifest.json i dodane ręcznie w karcie dodatku (meta.requires).
+function depKeys(p) {
+  const out = new Map();
+  for (const d of p.dependencies || []) { const k = lc(d.name); if (k && k !== p.key && !out.has(k)) out.set(k, false); }
+  for (const r of p.meta.requires || []) { const k = lc(r); if (k && k !== p.key && !out.has(k)) out.set(k, true); }
+  return [...out].map(([key, manual]) => ({ key, manual }));
+}
+// Z kilku kopii tego samego pakietu: włączona, potem z biblioteki.
+function pkgByKey(key) {
+  const rank = (x) => (x.enabled ? 0 : x.source === 'library' ? 1 : 2);
+  let best = null;
+  for (const p of S.scan.packages) if (p.key === key && (!best || rank(p) < rank(best))) best = p;
+  return best;
+}
+// Zależności (także pośrednie) spoza zbioru kluczy `on` – razem z tym, kto ich wymaga.
+function missingDeps(roots, on) {
+  const have = new Set(on);
+  const queue = [...roots];
+  const out = [];
+  while (queue.length) {
+    const p = queue.shift();
+    for (const d of depKeys(p)) {
+      const dep = pkgByKey(d.key);
+      if (!dep || have.has(d.key)) continue;
+      have.add(d.key);
+      out.push({ dep, by: p });
+      queue.push(dep);
+    }
+  }
+  return out;
+}
+// Przy włączaniu dodatku włączamy jego zależności, przy wyłączaniu ostrzegamy, kto jeszcze go potrzebuje.
+async function withDependencies(ids, on) {
+  const mode = S.settings.dependencyPrompt || 'ask';
+  if (mode === 'none') return ids;
+  const pk = ids.map(pkgById).filter(Boolean);
+  if (on) {
+    const keys = [...S.scan.packages.filter((p) => p.enabled).map((p) => p.key), ...pk.map((p) => p.key)];
+    const extra = missingDeps(pk, keys);
+    if (!extra.length) return ids;
+    if (mode === 'all') return [...ids, ...extra.map((x) => x.dep.id)];
+    const r = await dialog({
+      title: t('depQOn', pk.map((p) => p.title).join(', ')),
+      body: `<div>${esc(t('depQOnD', extra.length))}</div>
+        <div class="scroll-360 card list">${extra.map(({ dep, by }) => `<label class="clickable rel"><input type="checkbox" value="${dep.id}" checked class="check-box">
+          <div class="th">${dep.thumbs[0] ? `<img data-src="${esc(dep.thumbs[0])}" alt="">` : ''}</div><div class="grow"><b>${esc(dep.title)}</b><small>${esc(t('neededBy', by.title))} · ${fmtSize(dep.size)}</small></div></label>`).join('')}</div>
+        <div class="t-sm faint">${esc(t('depPromptHint'))}</div>`,
+      wide: true,
+      actions: [{ label: t('cancel'), value: null }, { label: t('withoutDeps'), value: [] }, { label: t('enableSelected'), kind: 'primary', value: (w) => $$('input:checked', w).map((i) => i.value) }],
+      onOpen: (w) => observeThumbs(w),
+    });
+    if (r === null) return null;
+    return [...ids, ...r];
+  }
+  if (mode !== 'ask') return ids;
+  const off = new Set(pk.map((p) => p.key));
+  const offIds = new Set(ids);
+  const needers = S.scan.packages.filter((x) => x.enabled && !offIds.has(x.id) && !off.has(x.key) && depKeys(x).some((d) => off.has(d.key)));
+  if (!needers.length) return ids;
+  const r = await dialog({
+    title: t('depQOff'),
+    body: `<div>${esc(t('depQOffD', pk.map((p) => p.title).join(', ')))}</div>
+      <div class="scroll-360 card list">${needers.map((x) => `<div class="rel"><div class="th">${x.thumbs[0] ? `<img data-src="${esc(x.thumbs[0])}" alt="">` : ''}</div><div class="grow"><b>${esc(x.title)}</b><small>${esc(x.creator || x.folder)}</small></div></div>`).join('')}</div>`,
+    wide: true,
+    actions: [{ label: t('cancel'), value: null }, { label: t('disableThemToo'), value: 'all' }, { label: t('disableAnyway'), kind: 'primary', value: 'only' }],
+    onOpen: (w) => observeThumbs(w),
+  });
+  if (r === null) return null;
+  return r === 'all' ? [...ids, ...needers.map((x) => x.id)] : ids;
+}
+async function addDependencyDialog(p) {
+  const have = new Set([p.key, ...depKeys(p).map((d) => d.key)]);
+  const pool = [...new Set(S.scan.packages.map((x) => x.key))].filter((k) => !have.has(k)).map(pkgByKey).sort((a, b) => a.title.localeCompare(b.title));
+  const rows = (q) => pool.filter((x) => !q || lc(`${x.title} ${x.folder} ${x.creator}`).includes(q)).slice(0, 80)
+    .map((x) => `<div class="rel clickable" data-pick="${esc(x.key)}"><div class="th">${x.thumbs[0] ? `<img data-src="${esc(x.thumbs[0])}" alt="">` : ''}</div><div class="grow"><b>${esc(x.title)}</b><small>${esc(t('cat_' + catOf(x)))} · ${esc(x.folder)}</small></div></div>`).join('') || `<div class="row"><div class="grow muted">${esc(t('depNothing'))}</div></div>`;
+  const key = await dialog({
+    title: t('addDepTitle', p.title),
+    body: `<input class="inp" id="dp-q" placeholder="${esc(t('addDepPh'))}"><div class="scroll-360 card list" id="dp-list">${rows('')}</div><div class="t-sm faint">${esc(t('addDepHint'))}</div>`,
+    wide: true,
+    actions: [{ label: t('cancel'), value: null }],
+    onOpen: (w, close) => {
+      const list = $('#dp-list', w);
+      const bind = () => { observeThumbs(list); $$('[data-pick]', list).forEach((el) => (el.onclick = () => close(el.dataset.pick))); };
+      bind();
+      $('#dp-q', w).oninput = debounce((e) => { list.innerHTML = rows(lc(e.target.value.trim())); bind(); }, 120);
+    },
+  });
+  if (!key) return;
+  await setMeta(p, { requires: [...(p.meta.requires || []), key] });
+  const cur = pkgById(p.id);
+  const dep = pkgByKey(key);
+  if (cur?.enabled && dep && !dep.enabled) toggle([dep.id], true, t('lblEnableDep'));
+}
+function depsPanel(p) {
+  const deps = depKeys(p);
+  const rows = deps.map(({ key, manual }) => {
+    const dep = pkgByKey(key);
+    const state = dep ? `<span class="tag ${dep.enabled ? 'ok' : 'warn'}">${esc(dep.enabled ? t('enabled') : t('disabled'))}</span>` : `<span class="tag">${esc(t('notInstalled'))}</span>`;
+    return `<div class="apt" ${dep ? `data-open="${dep.id}"` : ''}><span class="grow">${dep ? `${esc(dep.title)} <span class="faint mono">· ${esc(key)}</span>` : `<span class="mono">${esc(key)}</span>`}</span>
+      <span class="tag" title="${esc(manual ? t('depManualHint') : t('depManifestHint'))}">${esc(manual ? t('depManual') : 'manifest')}</span>${state}
+      ${manual ? `<button class="btn sm icon ghost" data-rmdep="${esc(key)}" title="${esc(t('remove'))}">${icon('close')}</button>` : ''}</div>`;
+  }).join('');
+  const off = deps.map((d) => pkgByKey(d.key)).filter((x) => x && !x.enabled);
+  return `<div class="panel"><h4>${icon('merge')}${esc(t('dependencies'))} ${deps.length ? `<span class="n">${deps.length}</span>` : ''}<span class="grow"></span>
+    ${off.length ? `<button class="btn sm ghost" id="s-dep-on">${esc(t('enableAllN', off.length))}</button>` : ''}<button class="btn sm ghost" id="s-dep-add">${icon('plus')}${esc(t('add'))}</button></h4>
+    ${rows ? `<div class="apt-list">${rows}</div>` : `<div class="t-sm pad-note faint">${esc(t('noDeps'))}</div>`}</div>`;
+}
 async function toggle(ids, on, label) {
   ids = ids.filter((id) => { const p = pkgById(id); return p && p.enabled !== on; });
   if (!ids.length) return;
   ids = await withLiveries(ids, on);
   if (!ids) return;
+  ids = await withDependencies(ids, on);
+  if (!ids) return;
+  ids = [...new Set(ids)];
   ids.forEach((id) => S.busy.add(id));
   ids.forEach((id) => $$(`[data-sw="${id}"]`).forEach((sw) => { sw.classList.add('busy'); sw.classList.toggle('on', on); }));
   try {
@@ -830,7 +940,7 @@ async function openSheet(id, keep = false) {
       ${p.airports.length ? `<div class="panel"><h4>${icon('airport')}${esc(t('airports'))} <span class="n">${p.airports.length}</span></h4><div class="mini-map" id="mini-map"></div>
         <div class="apt-list">${p.airports.slice(0, 120).map((a, i) => `<div class="apt" data-apt="${i}">${icaoTag(a)}<span class="grow">${esc(a.name || '—')}${a.city ? ` <span class="faint">· ${esc(a.city)}</span>` : ''}</span><span class="faint mono">${esc(a.country)}</span></div>`).join('')}</div>
         ${p.airports.some((a) => a.source === 'name') ? `<div class="t-sm pad-note faint">${esc(t('guessedAirports'))}</div>` : ''}</div>` : ''}
-      ${p.dependencies.length ? `<div class="panel"><h4>${icon('merge')}${esc(t('dependencies'))} <span class="n">${p.dependencies.length}</span></h4><div class="apt-list">${p.dependencies.map((d) => { const dep = S.scan.packages.find((x) => x.key === d.name.toLowerCase()); return `<div class="apt" ${dep ? `data-open="${dep.id}"` : ''}><span class="grow mono">${esc(d.name)}</span>${dep ? `<span class="tag ${dep.enabled ? 'ok' : 'warn'}">${esc(dep.enabled ? t('enabled') : t('disabled'))}</span>` : `<span class="tag">${esc(t('notInstalled'))}</span>`}</div>`; }).join('')}</div></div>` : ''}
+      ${depsPanel(p)}
       <div id="dependents"></div>
       <div id="notes-box"></div>
       <div class="panel"><h4>${icon('tag')}${esc(t('organize'))}</h4><div class="vstack pad">
@@ -878,6 +988,9 @@ async function openSheet(id, keep = false) {
   $('#s-move') && ($('#s-move').onclick = () => relocateDialog([p.id]));
   $('#s-trash').onclick = () => trashDialog([p.id]);
   $('#s-more') && ($('#s-more').onclick = () => { variantsOpen = true; openSheet(p.id, true); });
+  $('#s-dep-add').onclick = () => addDependencyDialog(p);
+  $('#s-dep-on') && ($('#s-dep-on').onclick = () => toggle(depKeys(p).map((d) => pkgByKey(d.key)).filter((x) => x && !x.enabled).map((x) => x.id), true, t('lblEnableDep')));
+  $$('[data-rmdep]', sh).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); setMeta(p, { requires: (m.requires || []).filter((k) => k !== b.dataset.rmdep) }); }));
   $('#s-liv-on') && ($('#s-liv-on').onclick = () => toggle(related.filter((x) => !x.enabled).map((x) => x.id), true, t('lblBulkEnable')));
   $('#s-layout') && ($('#s-layout').onclick = async () => {
     try { const n = await invoke('generate_layout', { id: p.id }); toast(t('layoutDone', n)); await refresh(); } catch (e) { toast(errMsg(e), 'bad'); }
@@ -1431,7 +1544,17 @@ function profileDiff(prof, additive = false) {
   }
   const enable = [...want].map((k) => byKey.get(k)).filter((p) => p && !p.enabled).map((p) => p.id);
   const missing = [...want].filter((k) => !byKey.has(k));
-  const disable = additive ? [] : S.scan.packages.filter((p) => p.enabled && inScope(prof, p) && !want.has(p.key) && !p.meta.locked).map((p) => p.id);
+  let disable = additive ? [] : S.scan.packages.filter((p) => p.enabled && inScope(prof, p) && !want.has(p.key) && !p.meta.locked).map((p) => p.id);
+  // Zależności włączanych dodatków włączamy razem z nimi i nie wyłączamy tych, które są nadal potrzebne.
+  if ((S.settings.dependencyPrompt || 'ask') !== 'none') {
+    const off = new Set(disable);
+    const after = S.scan.packages.filter((p) => (p.enabled && !off.has(p.id)) || enable.includes(p.id));
+    for (const { dep } of missingDeps(after, after.map((p) => p.key))) {
+      if (off.has(dep.id)) off.delete(dep.id);
+      else if (!dep.enabled) enable.push(dep.id);
+    }
+    disable = disable.filter((id) => off.has(id));
+  }
   return { enable, disable, missing };
 }
 async function applyProfile(id, additive = false) {
@@ -1808,6 +1931,7 @@ function viewSettings(v) {
       ${row(esc(t('blockRunning')), esc(t('blockRunningD')), sw('blockWhileRunning'))}
       ${row(esc(t('confirmBulk')), esc(t('confirmBulkD')), sw('confirmBulk'))}
       ${row(esc(t('liveryPrompt')), esc(t('liveryPromptD')), `<select class="w-240 inp" id="st-lp">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.liveryPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('lp_' + k))}</option>`).join('')}</select>`)}
+      ${row(esc(t('depPrompt')), esc(t('depPromptD')), `<select class="w-240 inp" id="st-dp">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.dependencyPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('dp_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('autoUpdate')), esc(t('autoUpdateD')), sw('autoUpdateCheck'))}
     </div>
     <div class="card set-card"><h3>${icon('eye')}${esc(t('setLook'))}</h3>
@@ -1851,6 +1975,7 @@ function viewSettings(v) {
   }));
   $('#st-lm').onchange = (e) => { s.linkMode = e.target.value; persist(); };
   $('#st-lp').onchange = (e) => { s.liveryPrompt = e.target.value; persist(); };
+  $('#st-dp').onchange = (e) => { s.dependencyPrompt = e.target.value; persist(); };
   $('#st-map').onchange = (e) => { s.mapStyle = e.target.value; persist(); };
   $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));

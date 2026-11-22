@@ -136,7 +136,15 @@ fn save_settings(state: St, settings: Settings) -> Result<Settings, String> {
             l.name = Path::new(&l.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| l.path.clone());
         }
     }
-    s.meta.retain(|_, m| m.favorite || m.locked || !m.category.is_empty() || !m.tags.is_empty() || !m.note.is_empty());
+    s.meta.retain(|_, m| m.favorite || m.locked || !m.category.is_empty() || !m.tags.is_empty() || !m.note.is_empty() || !m.requires.is_empty());
+    for m in s.meta.values_mut() {
+        for r in m.requires.iter_mut() {
+            *r = r.trim().to_lowercase();
+        }
+        m.requires.retain(|r| !r.is_empty());
+        m.requires.sort();
+        m.requires.dedup();
+    }
     let old = state.settings();
     state.store.save("settings.json", &s)?;
     let layout_changed = old.libraries.iter().map(|l| &l.path).ne(s.libraries.iter().map(|l| &l.path))
@@ -434,7 +442,7 @@ fn package_details(state: St, id: String) -> Result<Details, String> {
     let dependents = scan
         .packages
         .iter()
-        .filter(|o| o.info.dependencies.iter().any(|d| d.name.eq_ignore_ascii_case(&p.key)))
+        .filter(|o| o.key != p.key && o.requires().iter().any(|(k, _)| *k == p.key))
         .map(|o| o.id.clone())
         .collect();
     Ok(Details { manifest: raw.chars().take(20_000).collect(), release_notes: notes, dependents })

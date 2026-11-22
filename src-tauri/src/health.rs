@@ -107,9 +107,8 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
 
     let enabled_keys: HashSet<&str> = scan.packages.iter().filter(|p| p.enabled).map(|p| p.key.as_str()).collect();
     for p in scan.packages.iter().filter(|p| p.enabled) {
-        for d in &p.info.dependencies {
-            let k = d.name.to_lowercase();
-            if enabled_keys.contains(k.as_str()) || official.contains(&k) || k.starts_with("fs-base") || k.starts_with("asobo-") || k.starts_with("microsoft-") {
+        for (k, manual) in p.requires() {
+            if enabled_keys.contains(k.as_str()) || (!manual && (official.contains(&k) || k.starts_with("fs-base") || k.starts_with("asobo-") || k.starts_with("microsoft-"))) {
                 continue;
             }
             if let Some(dep) = scan.packages.iter().find(|x| x.key == k) {
@@ -118,8 +117,12 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
                 i.fix = "enable".into();
                 i.fix_label = tr!("Włącz zależność", "Enable dependency");
                 out.push(i);
+            } else if manual {
+                let mut i = issue("warn", "dependency-missing", tr!("Brak zależności: {}", "Missing dependency: {}", k), tr!("„{}” wymaga pakietu „{}” (zależność dodana ręcznie), którego nie ma w Community ani w bibliotekach.", "“{}” requires “{}” (a dependency you added), which is not in Community or any library.", p.info.title, k));
+                i.packages = vec![p.id.clone()];
+                out.push(i);
             } else {
-                let mut i = issue("info", "dependency-missing", tr!("Brak zależności: {}", "Missing dependency: {}", d.name), tr!("„{}” deklaruje zależność od „{}”, której nie ma w Community ani w bibliotekach (może to być pakiet oficjalny).", "“{}” declares a dependency on “{}”, which is not in Community or any library (it may be an official package).", p.info.title, d.name));
+                let mut i = issue("info", "dependency-missing", tr!("Brak zależności: {}", "Missing dependency: {}", k), tr!("„{}” deklaruje zależność od „{}”, której nie ma w Community ani w bibliotekach (może to być pakiet oficjalny).", "“{}” declares a dependency on “{}”, which is not in Community or any library (it may be an official package).", p.info.title, k));
                 i.packages = vec![p.id.clone()];
                 out.push(i);
             }

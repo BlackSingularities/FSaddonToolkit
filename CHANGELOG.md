@@ -1,5 +1,12 @@
 # Zmiany
 
+## 1.6.0
+
+- Zarządzanie zależnościami: przy włączaniu dodatku wyłączone pakiety, których wymaga (także pośrednio), włączają się razem z nim – z pytaniem, automatycznie albo wcale (Ustawienia → Działanie).
+- Przy wyłączaniu pakietu, którego potrzebują inne włączone dodatki, pojawia się ostrzeżenie z ich listą (wyłącz mimo to / wyłącz też je).
+- Zależności można dodawać ręcznie w karcie dodatku (np. bibliotekę obiektów, której twórca nie wpisał w manifest.json) i usuwać je; Kondycja i „Wymagany przez” biorą je pod uwagę.
+- Profile włączają zależności swoich dodatków i nie wyłączają pakietów, które są nadal potrzebne.
+
 ## 1.5.3
 
 - Kondycja, komunikaty o błędach, wyniki napraw i etykiety zadań w tle są po angielsku, gdy aplikacja jest po angielsku (wcześniej przychodziły z backendu zawsze po polsku).
