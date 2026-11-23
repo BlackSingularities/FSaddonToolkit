@@ -46,7 +46,7 @@ On first launch the toolkit reads your existing links (for example from MSFS Add
 - Dark, light, OpenStreetMap and satellite base maps
 
 **Prepare a flight**
-- Pick departure and arrival, then set a radius and an optional route corridor. Only the airport scenery near your route stays enabled, together with the aircraft you choose.
+- Pick departure and arrival, then set a radius and an optional route corridor. Only the airport scenery near your route stays enabled, together with the aircraft you choose. Distances in kilometres, nautical miles or miles.
 - **Load from SimBrief** (optional): one click imports your latest flight plan, including departure, destination and alternates, and selects the matching installed aircraft
 - Save the result as a profile for next time
 

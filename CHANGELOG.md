@@ -1,5 +1,9 @@
 # Zmiany
 
+## 1.7.0
+
+- Jednostka odległości do wyboru: kilometry, mile morskie (NM) albo mile – w „Przygotuj lot” (obok promienia i korytarza) i w Ustawieniach → Wygląd. Dotyczy odległości startu od celu, promienia, korytarza trasy i listy pasujących lotnisk.
+
 ## 1.6.0
 
 - Zarządzanie zależnościami: przy włączaniu dodatku wyłączone pakiety, których wymaga (także pośrednio), włączają się razem z nim – z pytaniem, automatycznie albo wcale (Ustawienia → Działanie).

@@ -1338,6 +1338,14 @@ function haversine(a, b) {
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
+// Odległości liczymy w km, a pokazujemy w jednostce z ustawień (km, mile morskie, mile).
+const UNITS = { km: { f: 1, label: 'km' }, nm: { f: 1 / 1.852, label: 'NM' }, mi: { f: 1 / 1.609344, label: 'mi' } };
+const unit = () => UNITS[S.settings.distanceUnit] || UNITS.km;
+const fmtDist = (km) => `${nf().format(Math.round(km * unit().f))} ${unit().label}`;
+// Suwaki chodzą co 5 jednostek bieżącej miary; wartość w km przeliczamy w obie strony.
+const toUnits = (km) => Math.round((km * unit().f) / 5) * 5;
+const unitMax = (km) => Math.round((km * unit().f) / 5) * 5;
+const unitSelect = (id, cls = 'w-200') => `<select class="${cls} inp" id="${id}">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${(S.settings.distanceUnit || 'km') === k ? 'selected' : ''}>${esc(t('unit_' + k, u.label))}</option>`).join('')}</select>`;
 function routePoints(dep, arr) {
   const d = haversine(dep, arr);
   const n = Math.max(2, Math.ceil(d / 20));
@@ -1392,11 +1400,12 @@ function renderPlan() {
       <label>${esc(t('departure'))}<div class="ac-wrap"><input class="w-full inp mono" id="pl-dep" placeholder="EPWA" value="${esc(P.dep?.icao || '')}"></div></label>
       <label>${esc(t('arrival'))}<div class="ac-wrap"><input class="w-full inp mono" id="pl-arr" placeholder="EPKK" value="${esc(P.arr?.icao || '')}"></div></label>
     </div>
-    <div class="t-sm min-line faint">${esc([P.dep && `${P.dep.icao} – ${P.dep.name}`, P.arr && `${P.arr.icao} – ${P.arr.name}`, P.dep && P.arr && `${Math.round(haversine(P.dep, P.arr))} km`].filter(Boolean).join(' · '))}</div>
+    <div class="t-sm min-line faint">${esc([P.dep && `${P.dep.icao} – ${P.dep.name}`, P.arr && `${P.arr.icao} – ${P.arr.name}`, P.dep && P.arr && fmtDist(haversine(P.dep, P.arr))].filter(Boolean).join(' · '))}</div>
     <div class="two">
-      <label>${esc(t('radius'))} · <b id="pl-rv">${P.radius} km</b><input type="range" id="pl-r" min="5" max="300" step="5" value="${P.radius}"></label>
-      <label>${esc(t('corridor'))} · <b id="pl-cv">${P.corridor ? P.corridor + ' km' : t('off')}</b><input type="range" id="pl-c" min="0" max="150" step="5" value="${P.corridor}"></label>
+      <label>${esc(t('radius'))} · <b id="pl-rv">${fmtDist(P.radius)}</b><input type="range" id="pl-r" min="5" max="${unitMax(300)}" step="5" value="${Math.max(5, toUnits(P.radius))}"></label>
+      <label>${esc(t('corridor'))} · <b id="pl-cv">${P.corridor ? fmtDist(P.corridor) : t('off')}</b><input type="range" id="pl-c" min="0" max="${unitMax(150)}" step="5" value="${toUnits(P.corridor)}"></label>
     </div>
+    <label>${esc(t('distanceUnit'))}${unitSelect('pl-unit', '')}</label>
     <label>${esc(t('aircraftOpt'))}<select class="inp" id="pl-ac"><option value="">${esc(t('noChange'))}</option>${aircraft.map((a) => `<option value="${a.id}" ${P.aircraft === a.id ? 'selected' : ''}>${esc(a.title)}</option>`).join('')}</select></label>
     <label class="check-inline check-row"><input type="checkbox" id="pl-off" ${P.offOthers ? 'checked' : ''}>${esc(t('offOtherAirports'))}</label>
     <label class="check-inline check-row"><input type="checkbox" id="pl-offac" ${P.offAircraft ? 'checked' : ''}>${esc(t('offOtherAircraft'))}</label>
@@ -1421,8 +1430,16 @@ function renderPlan() {
   };
   ac($('#pl-dep'), 'dep');
   ac($('#pl-arr'), 'arr');
-  $('#pl-r').oninput = (e) => { P.radius = +e.target.value; $('#pl-rv').textContent = `${P.radius} km`; renderPlanResult(); drawRoute(); };
-  $('#pl-c').oninput = (e) => { P.corridor = +e.target.value; $('#pl-cv').textContent = P.corridor ? `${P.corridor} km` : t('off'); renderPlanResult(); drawRoute(); };
+  $('#pl-r').oninput = (e) => { P.radius = +e.target.value / unit().f; $('#pl-rv').textContent = fmtDist(P.radius); renderPlanResult(); drawRoute(); };
+  $('#pl-c').oninput = (e) => { P.corridor = +e.target.value / unit().f; $('#pl-cv').textContent = P.corridor ? fmtDist(P.corridor) : t('off'); renderPlanResult(); drawRoute(); };
+  $('#pl-unit').onchange = (e) => {
+    S.settings.distanceUnit = e.target.value;
+    persist();
+    // Promień i korytarz wyrównujemy do kroku suwaka w nowej jednostce.
+    P.radius = Math.max(5, toUnits(P.radius)) / unit().f;
+    P.corridor = toUnits(P.corridor) / unit().f;
+    renderPlan();
+  };
   $('#pl-ac').onchange = (e) => { P.aircraft = e.target.value; renderPlanResult(); };
   $('#pl-off').onchange = (e) => { P.offOthers = e.target.checked; renderPlanResult(); };
   $('#pl-offac').onchange = (e) => { P.offAircraft = e.target.checked; renderPlanResult(); };
@@ -1478,7 +1495,7 @@ function renderPlanResult() {
   const r = computePlan();
   if (!r) { box.innerHTML = `<div class="t-md faint">${esc(t('planHint'))}</div>`; return; }
   box.innerHTML = `<div class="section-title-sm section-title">${icon('airport')}${esc(t('matchedAirports', r.match.length))}</div>
-    <div class="diff">${r.match.slice(0, 30).map((x) => `<div class="row"><span class="tag icao acc">${esc(x.icao)}</span><div class="grow"><div class="t-md t">${esc(x.p.title)}</div></div><span class="faint mono">${Math.round(x.d)} km</span>${x.p.enabled ? `<span class="tag ok">${icon('check')}</span>` : ''}</div>`).join('') || `<div class="t-md faint">${esc(t('noMatchedAirports'))}</div>`}</div>
+    <div class="diff">${r.match.slice(0, 30).map((x) => `<div class="row"><span class="tag icao acc">${esc(x.icao)}</span><div class="grow"><div class="t-md t">${esc(x.p.title)}</div></div><span class="faint mono">${fmtDist(x.d)}</span>${x.p.enabled ? `<span class="tag ok">${icon('check')}</span>` : ''}</div>`).join('') || `<div class="t-md faint">${esc(t('noMatchedAirports'))}</div>`}</div>
     <div class="hstack wrap-row mt-6">
       <span class="tag ok">+${r.enable.length}</span><span class="tag bad">−${r.disable.length}</span></div>
     <div class="hstack wrap-row mt-5">
@@ -1937,6 +1954,7 @@ function viewSettings(v) {
     <div class="card set-card"><h3>${icon('eye')}${esc(t('setLook'))}</h3>
       ${row(esc(t('theme')), '', `<select class="w-200 inp" id="st-theme">${['dark', 'amoled', 'light', 'auto'].map((k) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${esc(t('theme_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('mapStyle')), '', `<select class="w-200 inp" id="st-map">${[['dark', t('mapDark')], ['light', t('mapLight')], ['osm', 'OpenStreetMap'], ['satellite', t('mapSat')]].map(([k, l]) => `<option value="${k}" ${(s.mapStyle || 'dark') === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`)}
+      ${row(esc(t('distanceUnit')), esc(t('distanceUnitD')), unitSelect('st-unit'))}
       ${row(esc(t('accent')), '', `<div class="accent-pick">${['sky', 'amber', 'green', 'violet', 'rose'].map((a) => `<button data-acc="${a}" class="${s.accent === a ? 'on' : ''}" style="background:${{ sky: '#5cc4ff', amber: '#ffc35a', green: '#5fe0a0', violet: '#b7a2ff', rose: '#ff95b5' }[a]}"></button>`).join('')}</div>`)}
       ${row(esc(t('language')), '', `<select class="w-200 inp" id="st-lang"><option value="pl" ${s.language === 'pl' ? 'selected' : ''}>Polski</option><option value="en" ${s.language === 'en' ? 'selected' : ''}>English</option></select>`)}
       ${row(esc(t('cardSize')), '', `<input type="range" id="st-card" min="190" max="360" step="10" value="${s.cardSize || 240}">`)}
@@ -1977,6 +1995,7 @@ function viewSettings(v) {
   $('#st-lp').onchange = (e) => { s.liveryPrompt = e.target.value; persist(); };
   $('#st-dp').onchange = (e) => { s.dependencyPrompt = e.target.value; persist(); };
   $('#st-map').onchange = (e) => { s.mapStyle = e.target.value; persist(); };
+  $('#st-unit').onchange = (e) => { s.distanceUnit = e.target.value; persist(); };
   $('#st-theme').onchange = (e) => { s.theme = e.target.value; applyTheme(); persist(); renderView(); };
   $$('[data-acc]', v).forEach((b) => (b.onclick = () => { s.accent = b.dataset.acc; applyTheme(); persist(); renderView(); }));
   $('#st-lang').onchange = (e) => { s.language = e.target.value; s.languagePicked = true; setLang(s.language); persist(); renderRail(); renderView();

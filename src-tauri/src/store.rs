@@ -50,6 +50,8 @@ pub struct Settings {
     pub view: String,
     pub card_size: u32,
     pub map_style: String,
+    /// Jednostka odległości: "km" | "nm" | "mi".
+    pub distance_unit: String,
     pub sort: String,
     pub meta: HashMap<String, PackageMeta>,
     /// Pakiety spoza bibliotek, które kiedyś były podlinkowane w Community – pamiętamy je,
@@ -83,6 +85,7 @@ impl Default for Settings {
             view: "grid".into(),
             card_size: 240,
             map_style: "dark".into(),
+            distance_unit: "km".into(),
             sort: "title".into(),
             meta: HashMap::new(),
             external: vec![],
