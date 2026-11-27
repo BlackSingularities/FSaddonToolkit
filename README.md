@@ -22,6 +22,7 @@ Dodatki mogą leżeć na dowolnych dyskach – w folderze Community albo w **bib
 
 - Połączenia katalogów działają **bez uprawnień administratora** i między dyskami lokalnymi. Dla dysków sieciowych można przełączyć tryb na dowiązania symboliczne (wymaga trybu dewelopera Windows).
 - Łącza są usuwane zawsze jako łącza – aplikacja odmawia usunięcia zwykłego folderu w miejscu łącza.
+- Bibliotekom można nadać własne nazwy, a jedna biblioteka może łączyć kilka folderów (także na różnych dyskach).
 - Przy pierwszym uruchomieniu aplikacja sprawdza, dokąd prowadzą istniejące łącza w Community (np. z MSFS Addons Linker), i proponuje te foldery jako biblioteki.
 - Instalacja jest wykrywana z `UserCfg.opt` (`InstalledPackagesPath`) dla Steam i Microsoft Store; MSFS 2024 czyta także `Community2024`.
 
@@ -29,7 +30,7 @@ Dodatki mogą leżeć na dowolnych dyskach – w folderze Community albo w **bib
 
 - **Dodatki** – kafelki z miniaturami albo tabela; kategorie: samoloty, lotniska, sceneria, malowania, narzędzia, biblioteki obiektów; filtry stanu, źródła i ulubionych; wyszukiwanie po nazwie, twórcy, ICAO, mieście i tagach; zaznaczanie z Ctrl/Shift i operacje grupowe.
 - **Szczegóły pakietu** – galeria miniatur (ContentInfo, malowania), warianty z `aircraft.cfg`, lotniska z mini-mapą, zależności (z `manifest.json` i dodawane ręcznie) i „wymagany przez”, notatki, tagi, własna kategoria, ulubione i blokada, `manifest.json`, informacje o wydaniu.
-- **Mapa** – lotniska odczytane z plików BGL scenerii (rekordy lotnisk), dla pozostałych kod odgadnięty z nazwy paczki i współrzędne z wbudowanej bazy 78 tys. lotnisk (OurAirports). Pojedyncze punkty, zaznaczanie lotnisk przeciągnięciem i włączanie zaznaczonych, przełączanie z dymka, włącz/wyłącz wszystko w widoku, podkład ciemny, jasny, OSM i satelitarny.
+- **Mapa** – lotniska odczytane z plików BGL scenerii (rekordy lotnisk), dla pozostałych kod odgadnięty z nazwy paczki i współrzędne z wbudowanej bazy 78 tys. lotnisk (OurAirports). Pojedyncze punkty, zaznaczanie lotnisk przeciągnięciem i włączanie zaznaczonych, przełączanie z dymka, włącz/wyłącz wszystko w widoku, podkład ciemny, jasny, OSM i satelitarny, nakładka radaru opadów (RainViewer).
 - **Przygotuj lot** – start, cel, promień i korytarz trasy: włączone zostają tylko scenerie lotnisk w pobliżu (oraz wybrany samolot), reszta lotnisk jest wyłączana. Wynik można zapisać jako profil. Odległości w km, milach morskich (NM) albo milach.
 - **Profile** – zapamiętane zestawy dodatków z podglądem zmian przed zastosowaniem, trybem „tylko dodaj”, aktualizacją z bieżącego stanu, eksportem i importem (`.fsat-profile.json`), opcjonalnie ze stanem pakietów oficjalnych.
 - **Tryb lekki** – wyłącza wszystko poza zablokowanymi pakietami.

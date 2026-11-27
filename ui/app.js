@@ -168,7 +168,7 @@ async function setMeta(p, patch) {
 // ───────────── Przełączanie ─────────────
 // Przy włączaniu samolotu pytamy o jego malowania (osobne dodatki), przy wyłączaniu – czy je też wyłączyć.
 async function withLiveries(ids, on) {
-  const mode = S.settings.liveryPrompt || 'ask';
+  const mode = on ? S.settings.liveryPrompt || 'ask' : S.settings.liveryDisable || 'ask';
   const extra = [];
   const seen = new Set(ids);
   for (const id of ids) {
@@ -176,8 +176,8 @@ async function withLiveries(ids, on) {
     if (!p || catOf(p) !== 'aircraft') continue;
     for (const l of relatedOf(p)) if (l.enabled !== on && !seen.has(l.id)) { seen.add(l.id); extra.push(l); }
   }
-  if (!extra.length || (on && mode === 'none')) return ids;
-  if (on && mode === 'all') return [...ids, ...extra.map((l) => l.id)];
+  if (!extra.length || mode === 'none') return ids;
+  if (mode === 'all') return [...ids, ...extra.map((l) => l.id)];
   const planes = ids.map(pkgById).filter((p) => p && catOf(p) === 'aircraft').map((p) => p.title).join(', ');
   const r = await dialog({
     title: on ? t('liveryQOn', planes) : t('liveryQOff', planes),
@@ -185,7 +185,7 @@ async function withLiveries(ids, on) {
       <div class="hstack"><button class="btn sm" id="lv-all">${esc(t('selectAll'))}</button><button class="btn sm ghost" id="lv-none">${esc(t('selectNone'))}</button></div>
       <div class="scroll-360 card list">${extra.map((l) => `<label class="clickable rel"><input type="checkbox" value="${l.id}" ${on ? 'checked' : 'checked'} class="check-box">
         <div class="th">${l.thumbs[0] ? `<img data-src="${esc(l.thumbs[0])}" alt="">` : ''}</div><div class="grow"><b>${esc(l.title)}</b><small>${esc(l.creator || l.folder)} · ${fmtSize(l.size)}${l.aircraft.length ? ` · ${l.aircraft.length} ${esc(t('variantsShort'))}` : ''}</small></div></label>`).join('')}</div>
-      ${on ? `<div class="t-sm faint">${esc(t('liveryPromptHint'))}</div>` : ''}`,
+      <div class="t-sm faint">${esc(t('liveryPromptHint'))}</div>`,
     wide: true,
     actions: [{ label: t('cancel'), value: null }, { label: on ? t('withoutLiveries') : t('keepLiveries'), value: [] }, { label: on ? t('enableSelected') : t('disableSelected'), kind: 'primary', value: (w) => $$('input:checked', w).map((i) => i.value) }],
     onOpen: (w) => {
@@ -705,7 +705,7 @@ function viewAddons(v) {
   const on = list.filter((p) => p.enabled).length;
   const grouped = S.settings.groupCountry && f.cat === 'airport';
   topbar(t('nav_addons'), esc(t('shownOf', list.length, sc.packages.length, on)),
-    `<label class="search">${icon('search')}<input id="q" placeholder="${esc(t('searchPh'))}" value="${esc(f.q)}"><kbd>Ctrl F</kbd></label>
+    `<label class="search">${icon('search')}<input id="q" placeholder="${esc(t('searchPh'))}" value="${esc(f.q)}"><button class="search-x" type="button" tabindex="-1" title="${esc(t('clearSearch'))}" aria-label="${esc(t('clearSearch'))}">${icon('close')}</button><kbd>Ctrl F</kbd></label>
      <button class="btn" id="a-install">${icon('download')}${esc(t('install'))}</button>
      <button class="btn icon" id="a-refresh" title="${esc(t('refreshHint'))}">${icon('refresh')}</button>`);
   const countCat = (c) => sc.packages.filter((p) => c === 'all' || catOf(p) === c).length;
@@ -1136,7 +1136,7 @@ function viewMap(v) {
   }
   mapTopbar();
   v.innerHTML = `<div class="map-wrap"><div id="map-holder"><div id="map"></div>
-      <div class="map-tools"><button class="btn sm ${S.mapSelectMode ? 'primary' : ''}" id="m-select" title="${esc(t('boxSelectHint'))}">${icon('select')}${esc(t('boxSelect'))}</button></div>
+      <div class="map-tools"><button class="btn sm ${S.settings.mapRadar ? 'primary' : ''}" id="m-radar" title="${esc(t('radarHint'))}">${icon('radar')}${esc(t('radar'))}<span class="radar-time" id="m-radar-time"></span></button><button class="btn sm ${S.mapSelectMode ? 'primary' : ''}" id="m-select" title="${esc(t('boxSelectHint'))}">${icon('select')}${esc(t('boxSelect'))}</button></div>
       <div class="map-hint ${S.mapSelectMode ? '' : 'hidden'}" id="m-hint">${esc(t('boxSelectTip'))}</div>
       <div class="map-legend"><span><i class="dot-on"></i>${esc(t('enabled'))}</span><span><i class="dot-off"></i>${esc(t('disabled'))}</span><span><i class="dot-sel"></i>${esc(t('selected'))}</span></div>
     </div><div class="map-side" id="map-side"></div></div>`;
@@ -1174,11 +1174,56 @@ function viewMap(v) {
   });
   setupBoxSelect(map);
   $('#m-select').onclick = () => setSelectMode(!S.mapSelectMode);
+  $('#m-radar').onclick = () => { S.settings.mapRadar = !S.settings.mapRadar; persist(); setRadar(S.settings.mapRadar); };
+  map.on('unload', () => setRadar(false, map));
+  if (S.settings.mapRadar) setRadar(true);
   renderMapSide();
   setTimeout(() => map.invalidateSize(), 50);
   drawRoute(false);
 }
 const debounceInView = debounce(() => { if (mapTab === 'list') renderMapSide(); }, 150);
+// Radar opadów z RainViewer (darmowe API, bez klucza): ostatnia klatka z ostatnich ~2 godzin.
+// Kafelki są dostępne do zoomu 7 – wyżej Leaflet je powiększa.
+const RADAR_API = 'https://api.rainviewer.com/public/weather-maps.json';
+async function loadRadarFrame() {
+  const r = await fetch(RADAR_API, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`RainViewer ${r.status}`);
+  const j = await r.json();
+  const frame = (j.radar?.past || []).at(-1);
+  if (!frame) throw new Error('RainViewer: no frames');
+  return { url: `${j.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`, time: frame.time };
+}
+async function setRadar(on, map = S.map) {
+  clearInterval(S.radarTimer);
+  S.radarTimer = null;
+  $('#m-radar')?.classList.toggle('primary', on);
+  if (!on) {
+    S.radarLayer?.remove();
+    S.radarLayer = null;
+    const tm = $('#m-radar-time'); if (tm) tm.textContent = '';
+    return;
+  }
+  const update = async () => {
+    try {
+      const f = await loadRadarFrame();
+      if (!S.map || S.map !== map || !S.settings.mapRadar) return;
+      const layer = L.tileLayer(f.url, { opacity: 0.62, maxNativeZoom: 7, maxZoom: 19, zIndex: 5, attribution: '<a href="https://www.rainviewer.com/">RainViewer</a>' });
+      layer.addTo(map);
+      const old = S.radarLayer;
+      S.radarLayer = layer;
+      // Stara klatka znika dopiero, gdy nowa się wczyta – bez mrugania.
+      if (old) layer.once('load', () => old.remove());
+      const tm = $('#m-radar-time');
+      if (tm) tm.textContent = new Date(f.time * 1000).toLocaleTimeString(S.settings.language === 'en' ? 'en-GB' : 'pl-PL', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      toast(t('radarFail'), 'warn');
+      S.settings.mapRadar = false;
+      setRadar(false, map);
+    }
+  };
+  await update();
+  if (S.settings.mapRadar && S.map === map) S.radarTimer = setInterval(update, 5 * 60 * 1000);
+}
 function setSelectMode(on) {
   S.mapSelectMode = on;
   $('#m-select')?.classList.toggle('primary', on);
@@ -1779,7 +1824,7 @@ async function importProfile() {
 // ───────────── Pakiety oficjalne ─────────────
 async function viewOfficial(v) {
   const F = S.officialF;
-  topbar(t('nav_official'), esc(t('officialSub')), `<label class="search">${icon('search')}<input id="oq" placeholder="${esc(t('searchPh'))}" value="${esc(F.q)}"></label><button class="btn icon" id="o-refresh" title="${esc(t('refresh'))}">${icon('refresh')}</button>`);
+  topbar(t('nav_official'), esc(t('officialSub')), `<label class="search">${icon('search')}<input id="oq" placeholder="${esc(t('searchPh'))}" value="${esc(F.q)}"><button class="search-x" type="button" tabindex="-1" title="${esc(t('clearSearch'))}" aria-label="${esc(t('clearSearch'))}">${icon('close')}</button></label><button class="btn icon" id="o-refresh" title="${esc(t('refresh'))}">${icon('refresh')}</button>`);
   $('#o-refresh').onclick = () => { S.official = null; renderView(); };
   if (!S.official) {
     v.innerHTML = `<div class="loading">${icon('refresh', 'spin')}<div>${esc(t('loading'))}</div></div>`;
@@ -1905,6 +1950,18 @@ async function viewHistory(v) {
   $$('[data-undo]', v).forEach((b) => (b.onclick = () => undoBatch(b.dataset.undo)));
 }
 
+// Krzyżyk w polu wyszukiwania czyści je jednym kliknięciem.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('.search-x');
+  if (!b) return;
+  e.preventDefault();
+  const inp = b.parentElement.querySelector('input');
+  if (!inp) return;
+  inp.value = '';
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  inp.focus();
+});
+
 // ───────────── Ustawienia ─────────────
 async function pickLibrary() {
   const dir = await dlg.open({ directory: true, title: t('pickLibrary') });
@@ -1936,9 +1993,12 @@ function viewSettings(v) {
     </div>
     <div class="card set-card"><h3>${icon('library')}${esc(t('libraries'))}<span class="grow"></span><button class="btn sm primary" id="st-addlib">${icon('plus')}${esc(t('addLibrary'))}</button></h3>
       <div class="flush-top set-row"><div class="d">${esc(t('librariesD'))}</div></div>
-      ${s.libraries.map((l) => { const st = libStats.get(l.id); return `<div class="lib-row"><div class="icon-box ${st && !st.exists ? 'bad' : ''}">${icon(st && !st.exists ? 'warn' : 'drive')}</div>
-        <div class="grow"><input class="name" data-lname="${l.id}" value="${esc(l.name)}"><div class="t-sm d mono faint">${esc(l.path)}</div>
+      ${s.libraries.map((l) => { const st = libStats.get(l.id); const miss = new Set(st?.missing || []); const many = (l.folders || []).length > 0; return `<div class="lib-row"><div class="icon-box ${st && !st.exists ? 'bad' : ''}">${icon(st && !st.exists ? 'warn' : many ? 'layers' : 'drive')}</div>
+        <div class="grow"><div class="lib-name"><input class="name" data-lname="${l.id}" value="${esc(l.name)}" title="${esc(t('renameLib'))}" spellcheck="false"><button class="btn sm icon ghost" data-lrename="${l.id}" title="${esc(t('renameLib'))}">${icon('edit')}</button></div>
+        ${[l.path, ...(l.folders || [])].map((f, i) => `<div class="lib-folder t-sm mono ${miss.has(f) ? 'bad' : 'faint'}"><span class="selectable">${esc(f)}</span>${i === 0 && many ? `<span class="tag">${esc(t('libMain'))}</span>` : ''}${i > 0 ? `<button class="btn sm ghost" data-lsplit="${l.id}" data-f="${esc(f)}" title="${esc(t('libSplitD'))}">${esc(t('libSplit'))}</button><button class="btn sm icon ghost" data-lrmf="${l.id}" data-f="${esc(f)}" title="${esc(t('remove'))}">${icon('close')}</button>` : ''}</div>`).join('')}
         <div class="t-sm faint">${st ? (st.exists ? esc(t('libStat', st.count, st.enabled, fmtSize(st.size))) : esc(t('libMissing'))) : ''}</div></div>
+        <button class="btn sm icon" data-laddf="${l.id}" title="${esc(t('libAddFolder'))}">${icon('plus')}</button>
+        ${s.libraries.length > 1 ? `<button class="btn sm icon" data-lmerge="${l.id}" title="${esc(t('libMerge'))}">${icon('merge')}</button>` : ''}
         <button class="btn sm icon" data-open-path="${esc(l.path)}" title="${esc(t('openFolder'))}">${icon('folder')}</button>
         <button class="btn sm icon danger" data-rmlib="${l.id}" title="${esc(t('remove'))}">${icon('trash')}</button></div>`; }).join('') || `<div class="lib-row"><div class="grow muted">${esc(t('noLibraries'))}</div></div>`}
       ${sc.suggestedLibraries?.length ? sc.suggestedLibraries.map((x) => `<div class="lib-row"><div class="icon-box">${icon('link')}</div><div class="grow"><div class="t">${esc(t('suggestedLib'))}</div><div class="t-sm d mono faint">${esc(x.path)}</div><div class="t-sm faint">${esc(t('suggestedLibD', x.links, x.packages))}</div></div><button class="btn sm" data-sugg="${esc(x.path)}">${icon('plus')}${esc(t('add'))}</button></div>`).join('') : ''}
@@ -1948,6 +2008,7 @@ function viewSettings(v) {
       ${row(esc(t('blockRunning')), esc(t('blockRunningD')), sw('blockWhileRunning'))}
       ${row(esc(t('confirmBulk')), esc(t('confirmBulkD')), sw('confirmBulk'))}
       ${row(esc(t('liveryPrompt')), esc(t('liveryPromptD')), `<select class="w-240 inp" id="st-lp">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.liveryPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('lp_' + k))}</option>`).join('')}</select>`)}
+      ${row(esc(t('liveryDisable')), esc(t('liveryDisableD')), `<select class="w-240 inp" id="st-ld">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.liveryDisable || 'ask') === k ? 'selected' : ''}>${esc(t('ld_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('depPrompt')), esc(t('depPromptD')), `<select class="w-240 inp" id="st-dp">${['ask', 'all', 'none'].map((k) => `<option value="${k}" ${(s.dependencyPrompt || 'ask') === k ? 'selected' : ''}>${esc(t('dp_' + k))}</option>`).join('')}</select>`)}
       ${row(esc(t('autoUpdate')), esc(t('autoUpdateD')), sw('autoUpdateCheck'))}
     </div>
@@ -1983,6 +2044,44 @@ function viewSettings(v) {
     try { const lib = await invoke('check_library', { path: b.dataset.sugg }); s.libraries.push(lib); await saveSettings(); await refresh(); toast(t('libraryAdded', lib.name)); } catch (e) { toast(errMsg(e), 'bad'); }
   }));
   $$('[data-lname]', v).forEach((inp) => (inp.onchange = async () => { const l = s.libraries.find((x) => x.id === inp.dataset.lname); l.name = inp.value.trim() || l.name; await saveSettings(); await loadScan(); }));
+  $$('[data-lname]', v).forEach((inp) => (inp.onkeydown = (e) => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = s.libraries.find((x) => x.id === inp.dataset.lname)?.name || ''; inp.blur(); } }));
+  $$('[data-lrename]', v).forEach((b) => (b.onclick = () => { const inp = $(`[data-lname="${b.dataset.lrename}"]`, v); inp.focus(); inp.select(); }));
+  const libOf = (id) => s.libraries.find((x) => x.id === id);
+  $$('[data-laddf]', v).forEach((b) => (b.onclick = async () => {
+    const l = libOf(b.dataset.laddf);
+    const dir = await dlg.open({ directory: true, title: t('libAddFolder') });
+    if (!dir) return;
+    try { const x = await invoke('check_library', { path: dir }); l.folders = [...(l.folders || []), x.path]; await saveSettings(); await refresh(); toast(t('libFolderAdded', x.name, l.name)); } catch (e) { toast(errMsg(e), 'bad'); }
+  }));
+  $$('[data-lmerge]', v).forEach((b) => (b.onclick = async () => {
+    const src = libOf(b.dataset.lmerge);
+    const others = s.libraries.filter((x) => x.id !== src.id);
+    const r = await dialog({
+      title: t('libMerge'),
+      body: `<div>${esc(t('libMergeQ', src.name))}</div>
+        <label class="field">${esc(t('library'))}<select class="inp" id="lm-into">${others.map((l) => `<option value="${l.id}">${esc(l.name)} — ${esc(l.path)}</option>`).join('')}</select></label>
+        <div class="faint">${esc(t('libMergeHint'))}</div>`,
+      actions: [{ label: t('cancel'), value: null }, { label: t('libMergeGo'), kind: 'primary', value: (w) => $('#lm-into', w).value }],
+    });
+    if (!r) return;
+    const into = libOf(r);
+    into.folders = [...(into.folders || []), src.path, ...(src.folders || [])];
+    s.libraries = s.libraries.filter((x) => x.id !== src.id);
+    await saveSettings(); await refresh(); toast(t('libMerged', src.name, into.name));
+  }));
+  $$('[data-lsplit]', v).forEach((b) => (b.onclick = async () => {
+    const l = libOf(b.dataset.lsplit);
+    l.folders = (l.folders || []).filter((f) => f !== b.dataset.f);
+    await saveSettings();
+    try { S.settings.libraries.push(await invoke('check_library', { path: b.dataset.f })); await saveSettings(); } catch (e) { toast(errMsg(e), 'bad'); }
+    await refresh();
+  }));
+  $$('[data-lrmf]', v).forEach((b) => (b.onclick = async () => {
+    const l = libOf(b.dataset.lrmf);
+    if (!(await confirmBox(t('remove'), `<div>${esc(t('libRemoveFolderQ', b.dataset.f, l.name))}</div>`, t('remove')))) return;
+    l.folders = (l.folders || []).filter((f) => f !== b.dataset.f);
+    await saveSettings(); await refresh();
+  }));
   $$('[data-rmlib]', v).forEach((b) => (b.onclick = async () => {
     const l = s.libraries.find((x) => x.id === b.dataset.rmlib);
     const st = libStats.get(l.id);
@@ -1993,6 +2092,7 @@ function viewSettings(v) {
   }));
   $('#st-lm').onchange = (e) => { s.linkMode = e.target.value; persist(); };
   $('#st-lp').onchange = (e) => { s.liveryPrompt = e.target.value; persist(); };
+  $('#st-ld').onchange = (e) => { s.liveryDisable = e.target.value; persist(); };
   $('#st-dp').onchange = (e) => { s.dependencyPrompt = e.target.value; persist(); };
   $('#st-map').onchange = (e) => { s.mapStyle = e.target.value; persist(); };
   $('#st-unit').onchange = (e) => { s.distanceUnit = e.target.value; persist(); };

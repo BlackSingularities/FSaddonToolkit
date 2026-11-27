@@ -129,6 +129,9 @@ fn save_settings(state: St, settings: Settings) -> Result<Settings, String> {
     let mut s = settings;
     s.libraries.retain(|l| !l.path.trim().is_empty());
     for l in s.libraries.iter_mut() {
+        let main = links::norm(Path::new(&l.path));
+        let mut seen = std::collections::HashSet::from([main]);
+        l.folders.retain(|f| !f.trim().is_empty() && seen.insert(links::norm(Path::new(f))));
         if l.id.is_empty() {
             l.id = store::new_id();
         }
@@ -147,7 +150,7 @@ fn save_settings(state: St, settings: Settings) -> Result<Settings, String> {
     }
     let old = state.settings();
     state.store.save("settings.json", &s)?;
-    let layout_changed = old.libraries.iter().map(|l| &l.path).ne(s.libraries.iter().map(|l| &l.path))
+    let layout_changed = old.libraries.iter().flat_map(|l| l.roots()).ne(s.libraries.iter().flat_map(|l| l.roots()))
         || old.custom_community != s.custom_community
         || old.installation_id != s.installation_id
         || old.parking != s.parking
@@ -179,12 +182,15 @@ fn check_library(state: St, path: String) -> Result<Library, String> {
         return Err(tr!("To jest folder wyłączonych pakietów – wybierz inny", "This is the disabled-packages folder – pick another one"));
     }
     for l in &settings.libraries {
-        let ln = links::norm(Path::new(&l.path));
-        if ln == n || n.starts_with(&format!("{ln}\\")) || ln.starts_with(&format!("{n}\\")) {
-            return Err(tr!("Ten folder pokrywa się z biblioteką „{}”", "This folder overlaps the library “{}”", l.name));
+        for root in l.roots() {
+            let ln = links::norm(Path::new(root));
+            if ln == n || n.starts_with(&format!("{ln}\\")) || ln.starts_with(&format!("{n}\\")) {
+                return Err(tr!("Ten folder pokrywa się z biblioteką „{}”", "This folder overlaps the library “{}”", l.name));
+            }
         }
     }
     Ok(Library {
+        folders: vec![],
         id: store::new_id(),
         name: p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone()),
         path: links::clean(&p).to_string_lossy().into_owned(),

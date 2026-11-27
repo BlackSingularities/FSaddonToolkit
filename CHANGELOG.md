@@ -1,5 +1,14 @@
 # Zmiany
 
+## 1.8.0
+
+- Krzyżyk w polu wyszukiwania (Dodatki, Oficjalne) czyści je jednym kliknięciem.
+- Biblioteki: nazwę zmienia się wprost w Ustawieniach (ikona ołówka albo kliknięcie w nazwę) – nie musi być nazwą folderu.
+- Łączenie bibliotek: jedna biblioteka może obejmować kilka folderów, także na różnych dyskach. Folder dołącza się przyciskiem „+” albo łączy całą bibliotekę z inną; dodatkowy folder można potem wydzielić z powrotem albo odłączyć.
+- Nowe ustawienie „Malowania przy wyłączaniu samolotu” (Ustawienia → Działanie): pytaj, wyłączaj razem z samolotem albo zostaw włączone.
+- Mapa: nakładka radaru opadów (RainViewer) – przycisk „Radar” nad mapą, z godziną ostatniego obrazu; odświeża się co kilka minut.
+- Poprawka: karta szczegółów otwarta z mapy (przycisk „Szczegóły”) była przykryta przez mapę.
+
 ## 1.7.0
 
 - Jednostka odległości do wyboru: kilometry, mile morskie (NM) albo mile – w „Przygotuj lot” (obok promienia i korytarza) i w Ustawieniach → Wygląd. Dotyczy odległości startu od celu, promienia, korytarza trasy i listy pasujących lotnisk.

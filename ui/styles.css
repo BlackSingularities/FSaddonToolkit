@@ -219,6 +219,11 @@ a:hover { text-decoration: underline; }
 .search input::placeholder, .inp::placeholder { color: var(--text-3); }
 .search .ic { color: var(--text-3); width: 16px; height: 16px; }
 .search kbd { font: var(--fs-2xs) var(--mono); color: var(--text-3); border: 1px solid var(--line-2); border-radius: 5px; padding: 1px 5px; }
+.search-x { display: grid; place-items: center; width: 22px; height: 22px; margin-right: calc(var(--sp-2) * -1); padding: 0; border: 0; border-radius: var(--r-full); background: var(--s3); color: var(--text-2); cursor: pointer; flex: none; }
+.search-x:hover { background: var(--line-2); color: var(--text); }
+.search-x .ic { width: 13px; height: 13px; color: inherit; }
+.search input:placeholder-shown ~ .search-x { display: none; }
+.search input:not(:placeholder-shown) ~ kbd { display: none; }
 
 .inp, select.inp, textarea.inp {
   height: var(--ctl-h); padding: 0 var(--sp-5); border-radius: var(--r-sm); border: 1px solid var(--line); background-color: var(--s2); outline: 0; min-width: 0;
@@ -589,13 +594,15 @@ details.panel[open] > summary .chev { transform: rotate(90deg); }
 .apt-pin.official { background: var(--acc); border-radius: 5px; }
 .apt-pin.official.off { background: color-mix(in srgb, var(--pin-off) 60%, #000); }
 .apt-pin.route { background: var(--warn); width: 20px; height: 20px; }
-#map-holder { position: relative; height: 100%; min-height: 0; }
+#map-holder { position: relative; height: 100%; min-height: 0; isolation: isolate; }
 #map.selecting, #map.selecting .leaflet-interactive { cursor: crosshair; }
 .map-legend { position: absolute; left: 12px; bottom: 26px; z-index: 500; display: flex; gap: var(--sp-6); padding: var(--sp-4) var(--sp-6); border-radius: 12px; background: color-mix(in srgb, var(--s1) 88%, transparent); backdrop-filter: blur(8px); font-size: var(--fs-sm); color: var(--text-2); box-shadow: var(--shadow); }
 .map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: var(--sp-3); vertical-align: -1px; border: 2px solid #fff; }
 .map-tools { position: absolute; right: 12px; top: 12px; z-index: 500; display: flex; gap: var(--sp-3); }
 .map-tools .btn { box-shadow: var(--shadow); background: var(--s1); }
 .map-tools .btn.primary { background: var(--acc); }
+.map-tools .radar-time { font: var(--fs-2xs) var(--mono); opacity: .8; }
+.map-tools .radar-time:empty { display: none; }
 .map-hint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 500; padding: var(--sp-4) var(--sp-7); border-radius: var(--r-full); background: color-mix(in srgb, var(--s1) 90%, transparent); backdrop-filter: blur(8px); color: var(--text); font-size: var(--fs-sm); font-weight: 600; box-shadow: var(--shadow); pointer-events: none; white-space: nowrap; }
 .sel-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-5) var(--sp-8); }
 .plan { padding: var(--sp-7) var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -702,8 +709,12 @@ details.panel[open] > summary .chev { transform: rotate(90deg); }
 .lib-row .icon-box { width: 38px; height: 38px; border-radius: 11px; background: var(--acc-bg); color: var(--acc); display: grid; place-items: center; flex: none; }
 .lib-row .icon-box.bad { background: var(--bad-bg); color: var(--bad); }
 .lib-row .grow { flex: 1; min-width: 0; }
-.lib-row input.name { background: none; border: 0; outline: 0; font-weight: 650; padding: 0; width: 100%; }
-.lib-row input.name:focus { color: var(--acc); }
+.lib-row .lib-name { display: flex; align-items: center; gap: var(--sp-2); }
+.lib-row input.name { background: none; border: 1px solid transparent; border-radius: 7px; outline: 0; font-weight: 650; padding: 2px 6px; margin-left: -7px; width: 100%; max-width: 360px; }
+.lib-row input.name:hover { border-color: var(--line); }
+.lib-row input.name:focus { color: var(--acc); border-color: var(--acc); }
+.lib-row .lib-folder { display: flex; align-items: center; gap: var(--sp-3); min-height: 24px; }
+.lib-row .lib-folder.bad { color: var(--bad); }
 .accent-pick { display: flex; gap: var(--sp-4); }
 .accent-pick button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
 .accent-pick button.on { border-color: var(--text); }

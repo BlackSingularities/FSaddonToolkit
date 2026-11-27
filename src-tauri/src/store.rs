@@ -10,8 +10,19 @@ use std::path::{Path, PathBuf};
 #[serde(rename_all = "camelCase")]
 pub struct Library {
     pub id: String,
+    /// Główny folder – tu trafiają nowe instalacje i przenoszone pakiety.
     pub path: String,
     pub name: String,
+    /// Dodatkowe foldery połączone w tę samą bibliotekę.
+    #[serde(default)]
+    pub folders: Vec<String>,
+}
+
+impl Library {
+    /// Wszystkie foldery biblioteki, główny pierwszy.
+    pub fn roots(&self) -> impl Iterator<Item = &String> {
+        std::iter::once(&self.path).chain(self.folders.iter())
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -50,6 +61,8 @@ pub struct Settings {
     pub view: String,
     pub card_size: u32,
     pub map_style: String,
+    /// Nakładka radaru opadów na mapie.
+    pub map_radar: bool,
     /// Jednostka odległości: "km" | "nm" | "mi".
     pub distance_unit: String,
     pub sort: String,
@@ -64,6 +77,8 @@ pub struct Settings {
     pub simbrief_user: String,
     /// Zależności przy włączaniu dodatku: "ask" | "all" | "none".
     pub dependency_prompt: String,
+    /// Malowania przy wyłączaniu samolotu: "ask" | "all" | "none".
+    pub livery_disable: String,
 }
 
 impl Default for Settings {
@@ -85,6 +100,7 @@ impl Default for Settings {
             view: "grid".into(),
             card_size: 240,
             map_style: "dark".into(),
+            map_radar: false,
             distance_unit: "km".into(),
             sort: "title".into(),
             meta: HashMap::new(),
@@ -93,6 +109,7 @@ impl Default for Settings {
             livery_prompt: "ask".into(),
             simbrief_user: String::new(),
             dependency_prompt: "ask".into(),
+            livery_disable: "ask".into(),
         }
     }
 }

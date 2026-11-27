@@ -77,6 +77,9 @@ pub struct LibStat {
     pub id: String,
     pub name: String,
     pub path: String,
+    pub folders: Vec<String>,
+    /// Foldery biblioteki, których nie ma (odłączony dysk, usunięty folder).
+    pub missing: Vec<String>,
     pub exists: bool,
     pub count: usize,
     pub enabled: usize,
@@ -186,20 +189,33 @@ pub fn scan(layout: &Layout, settings: &Settings, cache: &mut Cache) -> Scan {
     let mut lib_stats: Vec<LibStat> = vec![];
 
     for lib in &layout.libraries {
-        let root = PathBuf::from(&lib.path);
-        let exists = root.is_dir();
-        lib_stats.push(LibStat { id: lib.id.clone(), name: lib.name.clone(), path: lib.path.clone(), exists, count: 0, enabled: 0, size: 0 });
-        if !exists {
-            continue;
-        }
+        let missing: Vec<String> = lib.roots().filter(|r| !Path::new(r).is_dir()).cloned().collect();
+        lib_stats.push(LibStat {
+            id: lib.id.clone(),
+            name: lib.name.clone(),
+            path: lib.path.clone(),
+            folders: lib.folders.clone(),
+            exists: missing.is_empty(),
+            missing,
+            count: 0,
+            enabled: 0,
+            size: 0,
+        });
+        for root in lib.roots().map(PathBuf::from).filter(|r| r.is_dir()) {
         for p in package::find_packages(&root, 3) {
             let n = links::norm(&p);
             if by_path.contains_key(&n) {
                 continue;
             }
-            let group = p.parent().and_then(|g| g.strip_prefix(&root).ok()).map(|g| g.to_string_lossy().into_owned()).unwrap_or_default();
+            let mut group = p.parent().and_then(|g| g.strip_prefix(&root).ok()).map(|g| g.to_string_lossy().into_owned()).unwrap_or_default();
+            // W połączonej bibliotece pakiety z dodatkowych folderów podpisujemy nazwą folderu.
+            if links::norm(&root) != links::norm(Path::new(&lib.path)) {
+                let head = folder_of(&root);
+                group = if group.is_empty() { head } else { format!("{head}\\{group}") };
+            }
             by_path.insert(n, cands.len());
             cands.push(Candidate { path: p, source: "library", library: Some(lib.clone()), group, link: None });
+        }
         }
     }
     if layout.parking.is_dir() {
@@ -325,7 +341,7 @@ pub fn scan(layout: &Layout, settings: &Settings, cache: &mut Cache) -> Scan {
             stat.enabled += p.enabled as usize;
         }
     }
-    let known: HashSet<String> = layout.libraries.iter().map(|l| links::norm(Path::new(&l.path))).collect();
+    let known: HashSet<String> = layout.libraries.iter().flat_map(|l| l.roots()).map(|r| links::norm(Path::new(r))).collect();
     let mut suggested_libraries: Vec<SuggestedLibrary> = suggested
         .into_iter()
         .filter(|(n, _)| !known.contains(n))
@@ -583,6 +599,31 @@ mod tests {
     }
 
     #[test]
+    fn combined_library() {
+        let dir = tempfile::tempdir().unwrap();
+        let community = dir.path().join("Community");
+        std::fs::create_dir_all(&community).unwrap();
+        let a = dir.path().join("A");
+        let b = dir.path().join("B");
+        pkg(&a, "pkg-a", "AIRCRAFT");
+        pkg(&b.join("Sub"), "pkg-b", "SCENERY");
+        let gone = dir.path().join("Gone").to_string_lossy().into_owned();
+        let settings = Settings {
+            custom_community: community.to_string_lossy().into_owned(),
+            libraries: vec![Library { id: "l1".into(), path: a.to_string_lossy().into_owned(), name: "Moja".into(), folders: vec![b.to_string_lossy().into_owned(), gone.clone()] }],
+            ..Default::default()
+        };
+        let layout = Layout::new(&settings, None).unwrap();
+        let s = scan(&layout, &settings, &mut Cache::default());
+        assert_eq!(s.packages.len(), 2);
+        assert!(s.packages.iter().all(|p| p.library_id == "l1" && p.library_name == "Moja"));
+        assert_eq!(s.packages.iter().find(|p| p.key == "pkg-b").unwrap().group, "B\\Sub");
+        assert_eq!(s.libraries[0].count, 2);
+        assert_eq!(s.libraries[0].missing, vec![gone]);
+        assert!(!s.libraries[0].exists);
+    }
+
+    #[test]
     fn full_cycle() {
         let dir = tempfile::tempdir().unwrap();
         let community = dir.path().join("Packages").join("Community");
@@ -597,7 +638,7 @@ mod tests {
 
         let settings = Settings {
             custom_community: community.to_string_lossy().into_owned(),
-            libraries: vec![Library { id: "l1".into(), path: lib_root.to_string_lossy().into_owned(), name: "Lib".into() }],
+            libraries: vec![Library { id: "l1".into(), path: lib_root.to_string_lossy().into_owned(), name: "Lib".into(), folders: vec![] }],
             ..Default::default()
         };
         let layout = Layout::new(&settings, None).unwrap();
@@ -657,7 +698,7 @@ mod real {
         let Some(i) = inst.first() else { return };
         let mut settings = Settings::default();
         if let Ok(lib) = std::env::var("FSAT_LIB") {
-            settings.libraries.push(Library { id: "real".into(), path: lib, name: "Dodatki".into() });
+            settings.libraries.push(Library { id: "real".into(), path: lib, name: "Dodatki".into(), folders: vec![] });
         }
         let layout = Layout::new(&settings, Some(i)).unwrap();
         let mut cache = Cache::default();

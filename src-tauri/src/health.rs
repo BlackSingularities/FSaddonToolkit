@@ -41,8 +41,8 @@ pub fn check(scan: &Scan, official: &HashSet<String>) -> Vec<Issue> {
     let mut out = vec![];
 
     for lib in scan.libraries.iter().filter(|l| !l.exists) {
-        let mut i = issue("error", "library-missing", tr!("Biblioteka „{}” jest niedostępna", "Library “{}” is unavailable", lib.name), tr!("Folder {} nie istnieje albo dysk jest odłączony. Pakiety z tej biblioteki nie są widoczne.", "Folder {} does not exist or the drive is disconnected. Packages from this library are not visible.", lib.path));
-        i.paths = vec![lib.path.clone()];
+        let mut i = issue("error", "library-missing", tr!("Biblioteka „{}” jest niedostępna", "Library “{}” is unavailable", lib.name), tr!("Folder {} nie istnieje albo dysk jest odłączony. Pakiety z tego folderu nie są widoczne.", "Folder {} does not exist or the drive is disconnected. Packages from this folder are not visible.", lib.missing.join(", ")));
+        i.paths = lib.missing.clone();
         out.push(i);
     }
 

@@ -24,7 +24,7 @@ FS Addon Toolkit is a free, open-source add-on manager for Microsoft Flight Simu
 
 Your add-ons stay where they are, for example `D:\Scenery Vault` or `H:\Add-ons`. When you enable one, the toolkit creates a **directory junction** in Community that points to its folder. When you disable it, only that link is removed and your files are never touched. Junctions work across local drives **without administrator rights**. For network drives you can switch to symbolic links.
 
-On first launch the toolkit reads your existing links (for example from MSFS Addons Linker) and offers those folders as libraries, so you can switch over in under a minute.
+On first launch the toolkit reads your existing links (for example from MSFS Addons Linker) and offers those folders as libraries, so you can switch over in under a minute. Libraries can be renamed, and one library can combine several folders.
 
 ### Features
 
@@ -32,7 +32,7 @@ On first launch the toolkit reads your existing links (for example from MSFS Add
 - Thumbnail tiles or a compact table, with categories for aircraft, airports, scenery, liveries, utilities and object libraries
 - Search by name, developer, ICAO code, city, country or your own tags
 - Filter by state, source and favourites, multi-select with Ctrl/Shift and apply changes in bulk
-- Liveries are matched to their aircraft: enabling an aircraft offers its liveries, and disabling it asks whether to disable them too
+- Liveries are matched to their aircraft: enabling an aircraft offers its liveries, and disabling it can ask about them or disable them automatically
 - Group airports by country, with flags and a single switch for a whole country
 
 **Package details**
@@ -43,7 +43,7 @@ On first launch the toolkit reads your existing links (for example from MSFS Add
 **Airport map**
 - Every airport from your scenery on a world map, read directly from the BGL files. Names are matched against a built-in database of 78,000 airports.
 - Enable or disable airports from the map, box-select a whole region and switch it on at once
-- Dark, light, OpenStreetMap and satellite base maps
+- Dark, light, OpenStreetMap and satellite base maps, with an optional precipitation radar overlay (RainViewer)
 
 **Prepare a flight**
 - Pick departure and arrival, then set a radius and an optional route corridor. Only the airport scenery near your route stays enabled, together with the aircraft you choose. Distances in kilometres, nautical miles or miles.
